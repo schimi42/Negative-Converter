@@ -570,65 +570,158 @@ private struct CropHandle: View {
 private struct PhotosLibrarySheet: View {
     @Bindable var viewModel: ConverterViewModel
     @Binding var isPresented: Bool
+    @State private var searchText = ""
 
     private let columns = [
-        GridItem(.adaptive(minimum: 130, maximum: 170), spacing: 12)
+        GridItem(.adaptive(minimum: 88, maximum: 112), spacing: 14)
     ]
 
+    private var filteredItems: [PhotosLibraryItem] {
+        guard !searchText.isEmpty else {
+            return viewModel.photosLibraryItems
+        }
+
+        return viewModel.photosLibraryItems.filter {
+            $0.title.localizedStandardContains(searchText)
+        }
+    }
+
     var body: some View {
-        VStack(spacing: 0) {
-            HStack {
-                VStack(alignment: .leading, spacing: 4) {
-                    Text("Photos Library")
-                        .font(.title2.bold())
-                    Text("Select images to add to the current batch.")
-                        .foregroundStyle(.secondary)
-                }
-
-                Spacer()
-
-                Button("Reload") {
-                    viewModel.loadPhotosLibrary()
-                }
-                .disabled(viewModel.isLoadingPhotosLibrary)
-
-                Button("Cancel") {
-                    isPresented = false
-                }
-
-                Button("Add Selected") {
-                    viewModel.addSelectedPhotosToBatch()
-                    isPresented = false
-                }
-                .keyboardShortcut(.defaultAction)
-                .disabled(!viewModel.hasPhotosLibrarySelection || viewModel.isLoadingPhotosLibrary)
+        HSplitView {
+            PhotosLibrarySidebar(
+                collections: viewModel.photosLibraryCollections,
+                selectedCollectionID: viewModel.selectedPhotosCollectionID
+            ) { collection in
+                viewModel.selectPhotosLibraryCollection(collection)
             }
-            .padding(20)
+                .frame(minWidth: 170, idealWidth: 190, maxWidth: 220)
 
-            Divider()
+            VStack(spacing: 0) {
+                HStack(spacing: 14) {
+                    Text(viewModel.selectedPhotosLibraryCollection?.title ?? "Photos")
+                        .font(.headline)
+                        .lineLimit(1)
+                        .frame(width: 140, alignment: .leading)
 
-            if viewModel.isLoadingPhotosLibrary && viewModel.photosLibraryItems.isEmpty {
-                ProgressView("Loading Photos Library...")
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-            } else if viewModel.photosLibraryItems.isEmpty {
-                ContentUnavailableView("No Photos Loaded", systemImage: "photo.on.rectangle", description: Text("Grant access to Photos and reload the library."))
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-            } else {
-                ScrollView {
-                    LazyVGrid(columns: columns, spacing: 12) {
-                        ForEach(viewModel.photosLibraryItems) { item in
-                            PhotosLibraryGridItem(
-                                item: item,
-                                isSelected: viewModel.selectedPhotosAssetIDs.contains(item.id)
-                            ) {
-                                viewModel.togglePhotosLibrarySelection(item)
+                    HStack(spacing: 8) {
+                        Image(systemName: "magnifyingglass")
+                            .foregroundStyle(.secondary)
+                        TextField("Search Library", text: $searchText)
+                            .textFieldStyle(.plain)
+                    }
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 8)
+                    .background(Color(nsColor: .controlBackgroundColor), in: RoundedRectangle(cornerRadius: 8))
+                    .frame(maxWidth: 360)
+
+                    Spacer()
+
+                    Button {
+                        viewModel.loadPhotosLibrary()
+                    } label: {
+                        Label("Reload", systemImage: "arrow.clockwise")
+                    }
+                    .labelStyle(.iconOnly)
+                    .disabled(viewModel.isLoadingPhotosLibrary)
+                    .help("Reload Photos Library")
+                }
+                .padding(.horizontal, 18)
+                .padding(.vertical, 14)
+
+                Divider()
+
+                if viewModel.isLoadingPhotosLibrary && viewModel.photosLibraryItems.isEmpty {
+                    ProgressView("Loading Photos Library...")
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                } else if viewModel.photosLibraryItems.isEmpty {
+                    ContentUnavailableView("No Photos Loaded", systemImage: "photo.on.rectangle", description: Text("Grant access to Photos and reload the library."))
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                } else if filteredItems.isEmpty {
+                    ContentUnavailableView.search(text: searchText)
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                } else {
+                    ScrollView {
+                        LazyVGrid(columns: columns, alignment: .leading, spacing: 14) {
+                            ForEach(filteredItems) { item in
+                                PhotosLibraryGridItem(
+                                    item: item,
+                                    isSelected: viewModel.selectedPhotosAssetIDs.contains(item.id)
+                                ) {
+                                    viewModel.togglePhotosLibrarySelection(item)
+                                }
                             }
                         }
+                        .padding(18)
                     }
-                    .padding(16)
+                }
+
+                Divider()
+
+                HStack {
+                    Spacer()
+
+                    VStack(spacing: 2) {
+                        Text("Choose Photos")
+                            .font(.caption.bold())
+                        Text("\(viewModel.selectedPhotosAssetIDs.count) selected")
+                            .font(.caption2)
+                            .foregroundStyle(.secondary)
+                    }
+
+                    Spacer()
+
+                    Button("Cancel") {
+                        isPresented = false
+                    }
+
+                    Button("Add") {
+                        viewModel.addSelectedPhotosToBatch()
+                        isPresented = false
+                    }
+                    .keyboardShortcut(.defaultAction)
+                    .disabled(!viewModel.hasPhotosLibrarySelection || viewModel.isLoadingPhotosLibrary)
+                }
+                .padding(.horizontal, 18)
+                .padding(.vertical, 10)
+            }
+        }
+    }
+}
+
+private struct PhotosLibrarySidebar: View {
+    let collections: [PhotosLibraryCollection]
+    let selectedCollectionID: String
+    let onSelect: (PhotosLibraryCollection) -> Void
+
+    private var sections: [String] {
+        ["Library", "Pinned", "Albums"].filter { section in
+            collections.contains { $0.section == section }
+        }
+    }
+
+    var body: some View {
+        List {
+            ForEach(sections, id: \.self) { section in
+                Section(section) {
+                    ForEach(collections.filter { $0.section == section }) { collection in
+                        Button {
+                            onSelect(collection)
+                        } label: {
+                            Label(collection.title, systemImage: collection.systemImage)
+                                .lineLimit(1)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                        }
+                        .buttonStyle(.plain)
+                        .listRowBackground(
+                            collection.id == selectedCollectionID
+                            ? Color.accentColor.opacity(0.18)
+                            : Color.clear
+                        )
+                    }
                 }
             }
         }
+        .listStyle(.sidebar)
     }
 }
 
@@ -639,41 +732,43 @@ private struct PhotosLibraryGridItem: View {
 
     var body: some View {
         Button(action: action) {
-            VStack(alignment: .leading, spacing: 8) {
-                ZStack(alignment: .topTrailing) {
-                    Rectangle()
-                        .fill(Color(nsColor: .textBackgroundColor))
-                        .aspectRatio(1, contentMode: .fit)
+            ZStack(alignment: .bottomLeading) {
+                Rectangle()
+                    .fill(Color(nsColor: .textBackgroundColor))
 
-                    if let thumbnail = item.thumbnail {
-                        Image(nsImage: thumbnail)
-                            .resizable()
-                            .scaledToFill()
-                            .aspectRatio(1, contentMode: .fit)
-                            .clipped()
-                    } else {
-                        Image(systemName: "photo")
-                            .font(.system(size: 30))
-                            .foregroundStyle(.secondary)
-                            .frame(maxWidth: .infinity, maxHeight: .infinity)
-                    }
-
-                    Image(systemName: isSelected ? "checkmark.circle.fill" : "circle")
-                        .font(.title3)
-                        .foregroundStyle(isSelected ? .blue : .white)
-                        .shadow(radius: 2)
-                        .padding(8)
+                if let thumbnail = item.thumbnail {
+                    Image(nsImage: thumbnail)
+                        .resizable()
+                        .scaledToFill()
+                        .frame(width: 88, height: 66)
+                        .clipped()
+                } else {
+                    Image(systemName: "photo")
+                        .font(.system(size: 24))
+                        .foregroundStyle(.secondary)
+                        .frame(width: 88, height: 66)
                 }
 
-                Text(item.title)
-                    .font(.caption)
-                    .lineLimit(1)
-                    .foregroundStyle(.primary)
+                if isSelected {
+                    RoundedRectangle(cornerRadius: 4)
+                        .stroke(.white, lineWidth: 3)
+
+                    Image(systemName: "checkmark.circle.fill")
+                        .font(.system(size: 14, weight: .semibold))
+                        .symbolRenderingMode(.palette)
+                        .foregroundStyle(.white, Color.accentColor)
+                        .padding(5)
+                }
             }
-            .padding(8)
-            .background(isSelected ? Color.accentColor.opacity(0.14) : Color.clear)
-            .border(isSelected ? Color.accentColor : Color(nsColor: .separatorColor), width: isSelected ? 2 : 1)
+            .frame(width: 88, height: 66)
+            .clipShape(RoundedRectangle(cornerRadius: 5))
+            .overlay {
+                RoundedRectangle(cornerRadius: 5)
+                    .stroke(isSelected ? Color.accentColor : Color(nsColor: .separatorColor).opacity(0.35), lineWidth: isSelected ? 2 : 1)
+            }
+            .contentShape(RoundedRectangle(cornerRadius: 5))
         }
         .buttonStyle(.plain)
+        .help(item.title)
     }
 }

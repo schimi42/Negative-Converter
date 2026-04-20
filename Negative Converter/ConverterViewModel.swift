@@ -41,6 +41,19 @@ struct PhotosLibraryItem: Identifiable {
     var title: String
 }
 
+struct PhotosLibraryCollection: Identifiable {
+    enum Source {
+        case allPhotos
+        case assetCollection(String)
+    }
+
+    let id: String
+    let title: String
+    let systemImage: String
+    let section: String
+    let source: Source
+}
+
 struct CropAspectRatio: Identifiable, Equatable {
     let id: String
     let title: String
@@ -68,6 +81,8 @@ enum CropEdge {
 final class ConverterViewModel {
     var items: [BatchImageItem] = []
     var photosLibraryItems: [PhotosLibraryItem] = []
+    var photosLibraryCollections: [PhotosLibraryCollection] = []
+    var selectedPhotosCollectionID = "library.all"
     var selectedPhotosAssetIDs: Set<String> = []
     var selectedID: BatchImageItem.ID?
     var crop = CropSettings()
@@ -107,6 +122,10 @@ final class ConverterViewModel {
 
     var selectedCropAspectRatio: CropAspectRatio {
         cropAspectRatios.first { $0.id == selectedCropAspectRatioID } ?? cropAspectRatios[0]
+    }
+
+    var selectedPhotosLibraryCollection: PhotosLibraryCollection? {
+        photosLibraryCollections.first { $0.id == selectedPhotosCollectionID }
     }
 
     func open(_ url: URL) {
@@ -305,15 +324,38 @@ final class ConverterViewModel {
                 return
             }
 
-            let assets = fetchPhotosAssets()
-            photosLibraryItems = assets.enumerated().map { index, asset in
-                PhotosLibraryItem(id: asset.localIdentifier, asset: asset, title: "Photo \(index + 1)")
+            let collections = fetchPhotosLibraryCollections()
+            photosLibraryCollections = collections
+            if !collections.contains(where: { $0.id == selectedPhotosCollectionID }) {
+                selectedPhotosCollectionID = collections.first?.id ?? "library.all"
             }
             selectedPhotosAssetIDs.removeAll()
-            isLoadingPhotosLibrary = false
-            message = "Loaded \(photosLibraryItems.count) Photos Library image\(photosLibraryItems.count == 1 ? "" : "s")."
 
-            await loadThumbnails()
+            let loadedCount = await loadPhotosLibraryItems(for: selectedPhotosCollectionID)
+            isLoadingPhotosLibrary = false
+            message = "Loaded \(loadedCount) Photos Library image\(loadedCount == 1 ? "" : "s")."
+        }
+    }
+
+    func selectPhotosLibraryCollection(_ collection: PhotosLibraryCollection) {
+        guard collection.id != selectedPhotosCollectionID else {
+            return
+        }
+
+        selectedPhotosCollectionID = collection.id
+        selectedPhotosAssetIDs.removeAll()
+        isLoadingPhotosLibrary = true
+        photosLibraryItems = []
+        message = "Loading \(collection.title)..."
+
+        Task {
+            let loadedCount = await loadPhotosLibraryItems(for: collection.id)
+            guard collection.id == selectedPhotosCollectionID else {
+                return
+            }
+
+            isLoadingPhotosLibrary = false
+            message = "Loaded \(loadedCount) image\(loadedCount == 1 ? "" : "s") from \(collection.title)."
         }
     }
 
@@ -574,12 +616,23 @@ final class ConverterViewModel {
         }
     }
 
-    private func fetchPhotosAssets() -> [PHAsset] {
+    private func fetchPhotosAssets(in collection: PhotosLibraryCollection?) -> [PHAsset] {
         let options = PHFetchOptions()
         options.sortDescriptors = [NSSortDescriptor(key: "creationDate", ascending: false)]
         options.predicate = NSPredicate(format: "mediaType == %d", PHAssetMediaType.image.rawValue)
 
-        let result = PHAsset.fetchAssets(with: options)
+        let result: PHFetchResult<PHAsset>
+        switch collection?.source {
+        case .assetCollection(let localIdentifier):
+            if let assetCollection = fetchAssetCollection(with: localIdentifier) {
+                result = PHAsset.fetchAssets(in: assetCollection, options: options)
+            } else {
+                result = PHAsset.fetchAssets(with: options)
+            }
+        case .allPhotos, nil:
+            result = PHAsset.fetchAssets(with: options)
+        }
+
         var assets: [PHAsset] = []
         result.enumerateObjects { asset, _, _ in
             assets.append(asset)
@@ -587,11 +640,92 @@ final class ConverterViewModel {
         return assets
     }
 
+    private func fetchPhotosLibraryCollections() -> [PhotosLibraryCollection] {
+        var collections = [
+            PhotosLibraryCollection(
+                id: "library.all",
+                title: "All Photos",
+                systemImage: "photo.on.rectangle",
+                section: "Library",
+                source: .allPhotos
+            )
+        ]
+
+        collections.append(contentsOf: fetchSmartAlbumCollections())
+        collections.append(contentsOf: fetchUserAlbumCollections())
+        return collections
+    }
+
+    private func fetchSmartAlbumCollections() -> [PhotosLibraryCollection] {
+        let smartAlbumTypes: [(PHAssetCollectionSubtype, String, String)] = [
+            (.smartAlbumFavorites, "Favorites", "heart"),
+            (.smartAlbumRecentlyAdded, "Recently Saved", "square.and.arrow.down"),
+            (.smartAlbumScreenshots, "Screenshots", "camera.viewfinder")
+        ]
+
+        return smartAlbumTypes.compactMap { subtype, fallbackTitle, systemImage in
+            let result = PHAssetCollection.fetchAssetCollections(with: .smartAlbum, subtype: subtype, options: nil)
+            guard let collection = result.firstObject else {
+                return nil
+            }
+
+            return PhotosLibraryCollection(
+                id: collection.localIdentifier,
+                title: collection.localizedTitle ?? fallbackTitle,
+                systemImage: systemImage,
+                section: "Pinned",
+                source: .assetCollection(collection.localIdentifier)
+            )
+        }
+    }
+
+    private func fetchUserAlbumCollections() -> [PhotosLibraryCollection] {
+        let result = PHAssetCollection.fetchAssetCollections(with: .album, subtype: .any, options: nil)
+        var collections: [PhotosLibraryCollection] = []
+
+        result.enumerateObjects { collection, _, _ in
+            collections.append(PhotosLibraryCollection(
+                id: collection.localIdentifier,
+                title: collection.localizedTitle ?? "Untitled Album",
+                systemImage: "rectangle.stack",
+                section: "Albums",
+                source: .assetCollection(collection.localIdentifier)
+            ))
+        }
+
+        return collections.sorted {
+            $0.title.localizedStandardCompare($1.title) == .orderedAscending
+        }
+    }
+
     private func fetchAsset(with localIdentifier: String) -> PHAsset? {
         PHAsset.fetchAssets(withLocalIdentifiers: [localIdentifier], options: nil).firstObject
     }
 
-    private func loadThumbnails() async {
+    private func fetchAssetCollection(with localIdentifier: String) -> PHAssetCollection? {
+        PHAssetCollection.fetchAssetCollections(withLocalIdentifiers: [localIdentifier], options: nil).firstObject
+    }
+
+    @discardableResult
+    private func loadPhotosLibraryItems(for collectionID: String) async -> Int {
+        let collection = photosLibraryCollections.first { $0.id == collectionID }
+        let assets = fetchPhotosAssets(in: collection)
+        guard collectionID == selectedPhotosCollectionID else {
+            return photosLibraryItems.count
+        }
+
+        photosLibraryItems = assets.enumerated().map { index, asset in
+            PhotosLibraryItem(id: asset.localIdentifier, asset: asset, title: assetTitle(asset, fallbackIndex: index))
+        }
+
+        Task {
+            await loadThumbnails(for: collectionID, assets: assets)
+        }
+
+        return photosLibraryItems.count
+    }
+
+    private func loadThumbnails(for collectionID: String, assets: [PHAsset]) async {
         let manager = PHCachingImageManager.default()
         let requestOptions = PHImageRequestOptions()
         requestOptions.deliveryMode = .fastFormat
@@ -599,11 +733,18 @@ final class ConverterViewModel {
         requestOptions.isNetworkAccessAllowed = true
 
         let targetSize = CGSize(width: 128, height: 128)
-        for index in photosLibraryItems.indices {
-            let asset = photosLibraryItems[index].asset
-            if let thumbnail = await requestImage(for: asset, targetSize: targetSize, manager: manager, options: requestOptions) {
-                photosLibraryItems[index].thumbnail = thumbnail
+        for asset in assets {
+            guard collectionID == selectedPhotosCollectionID else {
+                return
             }
+
+            guard let thumbnail = await requestImage(for: asset, targetSize: targetSize, manager: manager, options: requestOptions),
+                  let itemIndex = photosLibraryItems.firstIndex(where: { $0.id == asset.localIdentifier }),
+                  collectionID == selectedPhotosCollectionID else {
+                continue
+            }
+
+            photosLibraryItems[itemIndex].thumbnail = thumbnail
         }
     }
 
@@ -635,6 +776,10 @@ final class ConverterViewModel {
             originalImage: image,
             status: "Loaded from Photos"
         )
+    }
+
+    private func assetTitle(_ asset: PHAsset, fallbackIndex: Int) -> String {
+        asset.creationDate.map(Self.photoDateFormatter.string(from:)) ?? "Photo \(fallbackIndex + 1)"
     }
 
     private func requestContentEditingInput(for asset: PHAsset) async -> PHContentEditingInput? {
