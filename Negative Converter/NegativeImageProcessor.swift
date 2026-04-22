@@ -30,6 +30,20 @@ struct CropSettings: Equatable {
     }
 }
 
+struct ImageAdjustmentSettings: Equatable {
+    var rotationDegrees: Double = 0
+    var verticalCorrectionDegrees: Double = 0
+    var horizontalCorrectionDegrees: Double = 0
+    var isMirroredHorizontally = false
+
+    var isIdentity: Bool {
+        rotationDegrees == 0
+        && verticalCorrectionDegrees == 0
+        && horizontalCorrectionDegrees == 0
+        && !isMirroredHorizontally
+    }
+}
+
 enum NegativeImageProcessorError: LocalizedError {
     case couldNotReadImage
     case couldNotRenderImage
@@ -47,8 +61,30 @@ enum NegativeImageProcessorError: LocalizedError {
 enum NegativeImageProcessor {
     private static let context = CIContext(options: [.workingColorSpace: CGColorSpace(name: CGColorSpace.sRGB) as Any])
 
-    static func invertedImage(from image: NSImage, crop: CropSettings = CropSettings()) throws -> NSImage {
-        let cgImage = try invertedCGImage(from: image, crop: crop)
+    static func previewImage(
+        from image: NSImage,
+        adjustments: ImageAdjustmentSettings = ImageAdjustmentSettings()
+    ) throws -> NSImage {
+        let cgImage = try renderedCGImage(
+            from: image,
+            crop: CropSettings(),
+            adjustments: adjustments,
+            shouldInvert: false
+        )
+        return NSImage(cgImage: cgImage, size: NSSize(width: cgImage.width, height: cgImage.height))
+    }
+
+    static func invertedImage(
+        from image: NSImage,
+        crop: CropSettings = CropSettings(),
+        adjustments: ImageAdjustmentSettings = ImageAdjustmentSettings()
+    ) throws -> NSImage {
+        let cgImage = try renderedCGImage(
+            from: image,
+            crop: crop,
+            adjustments: adjustments,
+            shouldInvert: true
+        )
         return NSImage(cgImage: cgImage, size: NSSize(width: cgImage.width, height: cgImage.height))
     }
 
@@ -95,37 +131,77 @@ enum NegativeImageProcessor {
         }
     }
 
-    private static func invertedCGImage(from image: NSImage, crop: CropSettings) throws -> CGImage {
-        let cgImage = try croppedSource(image, crop: crop)
-        let inputImage = CIImage(cgImage: cgImage)
-        let outputImage = inputImage.applyingFilter("CIColorInvert")
+    private static func renderedCGImage(
+        from image: NSImage,
+        crop: CropSettings,
+        adjustments: ImageAdjustmentSettings,
+        shouldInvert: Bool
+    ) throws -> CGImage {
+        let preparedImage = try preparedImage(from: image, adjustments: adjustments)
+        let croppedImage = croppedImage(preparedImage, crop: crop)
+        let outputImage = shouldInvert ? croppedImage.applyingFilter("CIColorInvert") : croppedImage
 
-        guard let renderedImage = context.createCGImage(outputImage, from: inputImage.extent) else {
+        guard let renderedImage = context.createCGImage(outputImage, from: outputImage.extent) else {
             throw NegativeImageProcessorError.couldNotRenderImage
         }
 
         return renderedImage
     }
 
-    private static func croppedSource(_ image: NSImage, crop: CropSettings) throws -> CGImage {
+    private static func preparedImage(
+        from image: NSImage,
+        adjustments: ImageAdjustmentSettings
+    ) throws -> CIImage {
         let cgImage = try invertedSourceIfNeeded(image)
-        guard !crop.isIdentity else {
-            return cgImage
+        let sourceImage = CIImage(cgImage: cgImage)
+        guard !adjustments.isIdentity else {
+            return sourceImage
         }
 
-        let width = Double(cgImage.width)
-        let height = Double(cgImage.height)
-        let x = crop.left * width
-        let y = crop.top * height
-        let cropWidth = max(1, (1 - crop.left - crop.right) * width)
-        let cropHeight = max(1, (1 - crop.top - crop.bottom) * height)
+        let sourceExtent = sourceImage.extent
+        let center = CGPoint(x: sourceExtent.midX, y: sourceExtent.midY)
+        let rotationRadians = adjustments.rotationDegrees * .pi / 180
+        let verticalRadians = adjustments.verticalCorrectionDegrees * .pi / 180
+        let horizontalRadians = adjustments.horizontalCorrectionDegrees * .pi / 180
+        let perspectiveTransform = CGAffineTransform(
+            a: 1,
+            b: tan(verticalRadians),
+            c: tan(horizontalRadians),
+            d: 1,
+            tx: 0,
+            ty: 0
+        )
+
+        var transform = CGAffineTransform(translationX: -center.x, y: -center.y)
+        if adjustments.isMirroredHorizontally {
+            transform = transform.scaledBy(x: -1, y: 1)
+        }
+        transform = transform.rotated(by: rotationRadians)
+        transform = transform.concatenating(perspectiveTransform)
+        transform = transform.translatedBy(x: center.x, y: center.y)
+
+        let transformedImage = sourceImage.transformed(by: transform)
+        let transformedExtent = transformedImage.extent.integral
+
+        return transformedImage.transformed(by: CGAffineTransform(
+            translationX: -transformedExtent.minX,
+            y: -transformedExtent.minY
+        ))
+    }
+
+    private static func croppedImage(_ image: CIImage, crop: CropSettings) -> CIImage {
+        guard !crop.isIdentity else {
+            return image
+        }
+
+        let extent = image.extent.integral
+        let x = extent.minX + crop.left * extent.width
+        let y = extent.minY + crop.bottom * extent.height
+        let cropWidth = max(1, (1 - crop.left - crop.right) * extent.width)
+        let cropHeight = max(1, (1 - crop.top - crop.bottom) * extent.height)
         let cropRect = CGRect(x: x, y: y, width: cropWidth, height: cropHeight).integral
 
-        guard let croppedImage = cgImage.cropping(to: cropRect) else {
-            throw NegativeImageProcessorError.couldNotRenderImage
-        }
-
-        return croppedImage
+        return image.cropped(to: cropRect)
     }
 
     private static func invertedSourceIfNeeded(_ image: NSImage) throws -> CGImage {

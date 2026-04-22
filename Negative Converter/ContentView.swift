@@ -6,40 +6,40 @@
 //
 
 import SwiftUI
+import Photos
 import UniformTypeIdentifiers
 
 struct ContentView: View {
     @State private var viewModel = ConverterViewModel()
     @State private var isShowingImporter = false
     @State private var isShowingPhotosLibrary = false
-    @State private var batchThumbnailSize = 126.0
 
     var body: some View {
-        VStack(spacing: 0) {
-            header
+        NavigationSplitView {
+            sidebar
+                .navigationSplitViewColumnWidth(min: 200, ideal: 240, max: 300)
+        } detail: {
+            VStack(spacing: 0) {
+                HStack(spacing: 0) {
+                    VSplitView {
+                        imagePane(title: "Negative", image: viewModel.originalImage, showsCrop: true, isCropEditable: true)
+                        imagePane(title: "Positive", image: viewModel.convertedImage, showsCrop: true)
+                    }
+                    .frame(maxWidth: .infinity, minHeight: 420)
 
-            Divider()
+                    Divider()
 
-            cropControls
-
-            Divider()
-
-            HSplitView {
-                batchList
-                    .frame(minWidth: 260, idealWidth: 380, maxWidth: 760)
-
-                HSplitView {
-                    imagePane(title: "Negative", image: viewModel.originalImage, showsCrop: true, isCropEditable: true)
-                    imagePane(title: "Positive", image: viewModel.convertedImage, showsCrop: true)
+                    editingInspector
+                        .frame(width: 240)
                 }
+                .frame(minHeight: 420)
+
+                Divider()
+
+                footer
             }
-            .frame(minHeight: 420)
-
-            Divider()
-
-            footer
         }
-        .frame(minWidth: 860, minHeight: 620)
+        .frame(minWidth: 920, minHeight: 620)
         .fileImporter(isPresented: $isShowingImporter, allowedContentTypes: [.image], allowsMultipleSelection: true) { result in
             switch result {
             case .success(let urls):
@@ -64,171 +64,177 @@ struct ContentView: View {
         }
     }
 
-    private var header: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            Text("Negative Converter")
-                .font(.largeTitle.bold())
-            Text("Open black and white negatives, invert them, then save the positive images.")
-                .foregroundStyle(.secondary)
-
-            HStack {
-                Button("Open Images") {
-                    isShowingImporter = true
+    private var sidebar: some View {
+        List(selection: Binding(
+            get: { viewModel.selectedID },
+            set: { selectedID in
+                guard let selectedID,
+                      let item = viewModel.items.first(where: { $0.id == selectedID }) else {
+                    return
                 }
-                .keyboardShortcut("o", modifiers: .command)
 
-                Button("Open Photos Library") {
+                viewModel.select(item)
+            }
+        )) {
+            Section("Import") {
+                Button {
+                    isShowingImporter = true
+                } label: {
+                    Label("Open Images", systemImage: "folder")
+                }
+                .buttonStyle(.plain)
+
+                Button {
                     isShowingPhotosLibrary = true
                     viewModel.loadPhotosLibrary()
+                } label: {
+                    Label("Open Photos Library", systemImage: "photo.on.rectangle")
                 }
+                .buttonStyle(.plain)
+            }
 
-                Button("Invert Selected") {
-                    viewModel.convertSelected()
+            Section("Opened Photos") {
+                if viewModel.items.isEmpty {
+                    Label("No photos opened", systemImage: "photo.stack")
+                        .foregroundStyle(.secondary)
+                } else {
+                    ForEach(viewModel.items) { item in
+                        BatchRow(item: item)
+                            .tag(item.id)
+                    }
                 }
-                .disabled(viewModel.originalImage == nil)
-
-                Button("Invert All") {
-                    viewModel.convertAll()
-                }
-                .disabled(viewModel.items.isEmpty)
-
-                Button("Apply Crop to All") {
-                    viewModel.applyCropToAll()
-                }
-                .disabled(viewModel.items.isEmpty)
-
-                Button("Save Selected") {
-                    viewModel.saveSelected()
-                }
-                .disabled(viewModel.convertedImage == nil)
-
-                Button("Save All") {
-                    viewModel.saveAll()
-                }
-                .disabled(!viewModel.canSave)
-
-                Button("Export All...") {
-                    viewModel.exportAllToFolder()
-                }
-                .disabled(!viewModel.canSave)
-
-                Spacer()
             }
         }
-        .padding(24)
+        .listStyle(.sidebar)
     }
 
-    private var cropControls: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            HStack {
-                Text("Crop")
-                    .font(.headline)
+    private var editingInspector: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 22) {
+                Text("Geometry")
+                    .font(.title2.weight(.semibold))
 
-                Text("Use the same border trim for every image in the batch.")
-                    .foregroundStyle(.secondary)
+                AdjustmentSliderRow(
+                    title: "Rotation",
+                    systemImage: "dial.low",
+                    value: Binding(
+                        get: { viewModel.adjustments.rotationDegrees },
+                        set: { viewModel.setRotationDegrees($0) }
+                    ),
+                    range: -45...45,
+                    defaultValue: 0,
+                    valueSuffix: "°"
+                )
 
-                Spacer()
+                AdjustmentSliderRow(
+                    title: "Vertical",
+                    systemImage: "arrow.up.and.down.righttriangle.up.fill.righttriangle.down.fill",
+                    value: Binding(
+                        get: { viewModel.adjustments.verticalCorrectionDegrees },
+                        set: { viewModel.setVerticalCorrectionDegrees($0) }
+                    ),
+                    range: -20...20,
+                    defaultValue: 0,
+                    valueSuffix: "°"
+                )
 
-                Picker("Format", selection: Binding(
-                    get: { viewModel.selectedCropAspectRatioID },
-                    set: { viewModel.selectCropAspectRatio($0) }
-                )) {
+                AdjustmentSliderRow(
+                    title: "Horizontal",
+                    systemImage: "arrow.left.and.right.righttriangle.left.righttriangle.right.fill",
+                    value: Binding(
+                        get: { viewModel.adjustments.horizontalCorrectionDegrees },
+                        set: { viewModel.setHorizontalCorrectionDegrees($0) }
+                    ),
+                    range: -20...20,
+                    defaultValue: 0,
+                    valueSuffix: "°"
+                )
+
+                Button {
+                    viewModel.toggleMirroring()
+                } label: {
+                    Label("Mirror", systemImage: viewModel.adjustments.isMirroredHorizontally ? "flip.horizontal.fill" : "flip.horizontal")
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                }
+                .buttonStyle(.plain)
+
+                Button {
+                    viewModel.resetAdjustments()
+                } label: {
+                    Text("Reset Geometry")
+                        .frame(maxWidth: .infinity)
+                }
+                .disabled(viewModel.adjustments.isIdentity || viewModel.items.isEmpty)
+
+                Divider()
+
+                VStack(alignment: .leading, spacing: 10) {
+                    Text("Crop")
+                        .font(.title3.weight(.semibold))
+
+                    Label("Aspect Ratio", systemImage: "aspectratio")
+                        .font(.headline)
+
                     ForEach(viewModel.cropAspectRatios) { ratio in
-                        Text(ratio.title).tag(ratio.id)
-                    }
-                }
-                .labelsHidden()
-                .frame(width: 180)
+                        Button {
+                            viewModel.selectCropAspectRatio(ratio.id)
+                        } label: {
+                            HStack {
+                                if viewModel.selectedCropAspectRatioID == ratio.id {
+                                    Image(systemName: "checkmark")
+                                        .font(.caption.weight(.semibold))
+                                        .frame(width: 14)
+                                } else {
+                                    Color.clear
+                                        .frame(width: 14, height: 14)
+                                }
 
-                Toggle("Fixed ratio", isOn: Binding(
-                    get: { viewModel.isCropAspectRatioLocked },
-                    set: { viewModel.setCropAspectRatioLocked($0) }
-                ))
-                .disabled(viewModel.selectedCropAspectRatio.ratio == nil)
+                                Text(ratio.title)
+                                    .foregroundStyle(.primary)
 
-                Button("Reset Crop") {
-                    viewModel.resetCrop()
-                }
-                .disabled(viewModel.crop.isIdentity || viewModel.items.isEmpty)
-            }
-
-            Grid(horizontalSpacing: 16, verticalSpacing: 8) {
-                GridRow {
-                    cropSlider(title: "Left", value: viewModel.crop.left) { viewModel.setCrop(left: $0) }
-                    cropSlider(title: "Top", value: viewModel.crop.top) { viewModel.setCrop(top: $0) }
-                }
-
-                GridRow {
-                    cropSlider(title: "Right", value: viewModel.crop.right) { viewModel.setCrop(right: $0) }
-                    cropSlider(title: "Bottom", value: viewModel.crop.bottom) { viewModel.setCrop(bottom: $0) }
-                }
-            }
-        }
-        .padding(.horizontal, 24)
-        .padding(.vertical, 14)
-    }
-
-    private func cropSlider(title: String, value: Double, update: @escaping (Double) -> Void) -> some View {
-        HStack(spacing: 8) {
-            Text(title)
-                .frame(width: 52, alignment: .leading)
-            Slider(value: Binding(get: { value }, set: update), in: 0...0.45)
-                .frame(minWidth: 130)
-            Text(value.formatted(.percent.precision(.fractionLength(0))))
-                .monospacedDigit()
-                .frame(width: 42, alignment: .trailing)
-        }
-    }
-
-    private var batchList: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            HStack {
-                Text("Batch")
-                    .font(.headline)
-
-                Spacer()
-
-                Image(systemName: "rectangle.grid.2x2")
-                    .foregroundStyle(.secondary)
-
-                Slider(value: $batchThumbnailSize, in: 88...220)
-                    .frame(width: 110)
-
-                Text("\(viewModel.items.count)")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            }
-            .padding([.top, .horizontal], 16)
-            .padding(.bottom, 8)
-
-            if viewModel.items.isEmpty {
-                VStack(spacing: 8) {
-                    Image(systemName: "photo.stack")
-                        .font(.system(size: 36))
-                        .foregroundStyle(.secondary)
-                    Text("No images loaded")
-                        .foregroundStyle(.secondary)
-                }
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-            } else {
-                ScrollView {
-                    LazyVGrid(columns: [GridItem(.adaptive(minimum: batchThumbnailSize, maximum: batchThumbnailSize + 44), spacing: 10)], spacing: 10) {
-                        ForEach(viewModel.items) { item in
-                            BatchThumbnailCell(
-                                item: item,
-                                crop: viewModel.crop,
-                                thumbnailSize: batchThumbnailSize,
-                                isSelected: item.id == viewModel.selectedItem?.id
-                            ) {
-                                viewModel.select(item)
+                                Spacer()
                             }
+                            .padding(.vertical, 4)
                         }
+                        .buttonStyle(.plain)
                     }
-                    .padding(.horizontal, 12)
-                    .padding(.bottom, 12)
                 }
+
+                Button {
+                    viewModel.applyCropToSelected()
+                } label: {
+                    Text("Apply Crop")
+                        .frame(maxWidth: .infinity)
+                }
+                .disabled(!viewModel.hasSelectedItem || !viewModel.hasPendingCropChanges)
+
+                Button {
+                    viewModel.applyCropToAll()
+                } label: {
+                    Text("Apply Crop to All")
+                        .frame(maxWidth: .infinity)
+                }
+                .disabled(viewModel.items.isEmpty)
+
+                Button {
+                    viewModel.resetCrop()
+                } label: {
+                    Text("Reset Crop")
+                        .frame(maxWidth: .infinity)
+                }
+                .disabled(!viewModel.hasSelectedItem || (viewModel.crop.isIdentity && !viewModel.hasPendingCropChanges))
+
+                Button {
+                    viewModel.resetCropForAll()
+                } label: {
+                    Text("Reset Crop on All")
+                        .frame(maxWidth: .infinity)
+                }
+                .disabled(viewModel.items.isEmpty || viewModel.items.allSatisfy(\.crop.isIdentity))
             }
+            .padding(20)
         }
+        .background(Color(nsColor: .windowBackgroundColor))
     }
 
     private func imagePane(title: String, image: NSImage?, showsCrop: Bool = false, isCropEditable: Bool = false) -> some View {
@@ -286,9 +292,57 @@ struct ContentView: View {
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
+
+            Spacer(minLength: 20)
+
+            Button(selectedSaveLabel) {
+                viewModel.saveSelected()
+            }
+            .disabled(viewModel.convertedImage == nil)
+
+            Button(saveAllLabel) {
+                viewModel.saveAll()
+            }
+            .disabled(!viewModel.canSave)
+
+            Button(exportSelectedLabel) {
+                viewModel.exportSelectedToFolder()
+            }
+            .disabled(viewModel.convertedImage == nil)
+
+            Button(exportAllLabel) {
+                viewModel.exportAllToFolder()
+            }
+            .disabled(!viewModel.canSave)
         }
         .padding(.horizontal, 24)
         .padding(.vertical, 14)
+    }
+
+    private var selectedSaveLabel: String {
+        switch viewModel.selectedSourceKind {
+        case .photos:
+            "Save to Photos"
+        case .files, .mixed, .none:
+            "Save"
+        }
+    }
+
+    private var saveAllLabel: String {
+        switch viewModel.batchSourceKind {
+        case .photos:
+            "Save All to Photos"
+        case .files, .mixed, .none:
+            "Save All"
+        }
+    }
+
+    private var exportSelectedLabel: String {
+        "Export..."
+    }
+
+    private var exportAllLabel: String {
+        "Export All..."
     }
 }
 
@@ -299,30 +353,134 @@ struct ContentView: View {
 private struct BatchRow: View {
     let item: BatchImageItem
 
-    private var iconName: String {
-        item.convertedImage == nil ? "photo" : "checkmark.circle.fill"
-    }
-
-    private var iconColor: Color {
-        item.convertedImage == nil ? .secondary : .green
-    }
-
     var body: some View {
         HStack(spacing: 10) {
-            Image(systemName: iconName)
-                .foregroundStyle(iconColor)
+            ZStack {
+                RoundedRectangle(cornerRadius: 6)
+                    .fill(Color(nsColor: .textBackgroundColor))
 
-            VStack(alignment: .leading, spacing: 3) {
-                Text(item.fileName)
-                    .lineLimit(1)
-                Text(item.status)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+                Image(nsImage: item.originalImage)
+                    .resizable()
+                    .scaledToFill()
+                    .frame(width: 34, height: 34)
+                    .clipped()
+            }
+            .frame(width: 34, height: 34)
+            .clipShape(RoundedRectangle(cornerRadius: 6))
+            .overlay {
+                RoundedRectangle(cornerRadius: 6)
+                    .stroke(Color(nsColor: .separatorColor).opacity(0.4), lineWidth: 1)
             }
 
-            Spacer()
+            Text(item.fileName)
+                .lineLimit(1)
+                .frame(maxWidth: .infinity, alignment: .leading)
         }
         .contentShape(Rectangle())
+        .padding(.vertical, 2)
+    }
+}
+
+private struct AdjustmentSliderRow: View {
+    let title: String
+    let systemImage: String
+    @Binding var value: Double
+    let range: ClosedRange<Double>
+    let defaultValue: Double
+    let valueSuffix: String
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 8) {
+                Image(systemName: systemImage)
+                    .foregroundStyle(.secondary)
+                    .frame(width: 16)
+
+                Text(title)
+                    .font(.subheadline)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+
+                Text(formattedValue)
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+                    .monospacedDigit()
+            }
+
+            ResettableSlider(
+                value: $value,
+                range: range,
+                defaultValue: defaultValue
+            )
+            .frame(height: 14)
+        }
+    }
+
+    private var formattedValue: String {
+        "\(Int(value.rounded()))\(valueSuffix)"
+    }
+}
+
+private struct ResettableSlider: NSViewRepresentable {
+    @Binding var value: Double
+    let range: ClosedRange<Double>
+    let defaultValue: Double
+
+    func makeCoordinator() -> Coordinator {
+        Coordinator(value: $value, defaultValue: defaultValue)
+    }
+
+    func makeNSView(context: Context) -> NSSlider {
+        let slider = DoubleClickResetSlider(value: value, minValue: range.lowerBound, maxValue: range.upperBound, target: context.coordinator, action: #selector(Coordinator.valueChanged(_:)))
+        slider.resetDelegate = context.coordinator
+        slider.controlSize = .small
+        return slider
+    }
+
+    func updateNSView(_ nsView: NSSlider, context: Context) {
+        if nsView.doubleValue != value {
+            nsView.doubleValue = value
+        }
+
+        nsView.minValue = range.lowerBound
+        nsView.maxValue = range.upperBound
+        context.coordinator.value = $value
+        context.coordinator.defaultValue = defaultValue
+    }
+
+    final class Coordinator: NSObject, DoubleClickResetSliderDelegate {
+        var value: Binding<Double>
+        var defaultValue: Double
+
+        init(value: Binding<Double>, defaultValue: Double) {
+            self.value = value
+            self.defaultValue = defaultValue
+        }
+
+        @objc func valueChanged(_ sender: NSSlider) {
+            value.wrappedValue = sender.doubleValue
+        }
+
+        func sliderDidReceiveDoubleClick(_ slider: NSSlider) {
+            slider.doubleValue = defaultValue
+            value.wrappedValue = defaultValue
+        }
+    }
+}
+
+private protocol DoubleClickResetSliderDelegate: AnyObject {
+    func sliderDidReceiveDoubleClick(_ slider: NSSlider)
+}
+
+private final class DoubleClickResetSlider: NSSlider {
+    weak var resetDelegate: DoubleClickResetSliderDelegate?
+
+    override func mouseDown(with event: NSEvent) {
+        if event.clickCount == 2 {
+            resetDelegate?.sliderDidReceiveDoubleClick(self)
+            return
+        }
+
+        super.mouseDown(with: event)
     }
 }
 
@@ -685,6 +843,9 @@ private struct PhotosLibrarySheet: View {
                 .padding(.vertical, 10)
             }
         }
+        .onDisappear {
+            viewModel.isLoadingPhotosLibrary = false
+        }
     }
 }
 
@@ -736,18 +897,7 @@ private struct PhotosLibraryGridItem: View {
                 Rectangle()
                     .fill(Color(nsColor: .textBackgroundColor))
 
-                if let thumbnail = item.thumbnail {
-                    Image(nsImage: thumbnail)
-                        .resizable()
-                        .scaledToFill()
-                        .frame(width: 88, height: 66)
-                        .clipped()
-                } else {
-                    Image(systemName: "photo")
-                        .font(.system(size: 24))
-                        .foregroundStyle(.secondary)
-                        .frame(width: 88, height: 66)
-                }
+                PhotosLibraryThumbnailView(asset: item.asset)
 
                 if isSelected {
                     RoundedRectangle(cornerRadius: 4)
@@ -770,5 +920,48 @@ private struct PhotosLibraryGridItem: View {
         }
         .buttonStyle(.plain)
         .help(item.title)
+    }
+}
+
+private struct PhotosLibraryThumbnailView: View {
+    let asset: PHAsset
+    @State private var thumbnail: NSImage?
+
+    var body: some View {
+        Group {
+            if let thumbnail {
+                Image(nsImage: thumbnail)
+                    .resizable()
+                    .scaledToFill()
+            } else {
+                Image(systemName: "photo")
+                    .font(.system(size: 24))
+                    .foregroundStyle(.secondary)
+            }
+        }
+        .frame(width: 88, height: 66)
+        .clipped()
+        .task(id: asset.localIdentifier) {
+            thumbnail = await loadThumbnail(for: asset)
+        }
+    }
+
+    private func loadThumbnail(for asset: PHAsset) async -> NSImage? {
+        let manager = PHCachingImageManager()
+        let options = PHImageRequestOptions()
+        options.deliveryMode = .fastFormat
+        options.resizeMode = .fast
+        options.isNetworkAccessAllowed = true
+
+        return await withCheckedContinuation { continuation in
+            manager.requestImage(
+                for: asset,
+                targetSize: CGSize(width: 176, height: 132),
+                contentMode: .aspectFill,
+                options: options
+            ) { image, _ in
+                continuation.resume(returning: image)
+            }
+        }
     }
 }

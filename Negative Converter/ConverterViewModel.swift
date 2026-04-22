@@ -16,7 +16,10 @@ struct BatchImageItem: Identifiable {
     let assetIdentifier: String?
     var displayName: String
     var originalImage: NSImage
+    var previewImage: NSImage?
     var convertedImage: NSImage?
+    var crop: CropSettings = CropSettings()
+    var usesSharedCrop = true
     var status: String
 
     var fileName: String {
@@ -79,6 +82,13 @@ enum CropEdge {
 @Observable
 @MainActor
 final class ConverterViewModel {
+    enum BatchSourceKind {
+        case none
+        case files
+        case photos
+        case mixed
+    }
+
     var items: [BatchImageItem] = []
     var photosLibraryItems: [PhotosLibraryItem] = []
     var photosLibraryCollections: [PhotosLibraryCollection] = []
@@ -86,9 +96,11 @@ final class ConverterViewModel {
     var selectedPhotosAssetIDs: Set<String> = []
     var selectedID: BatchImageItem.ID?
     var crop = CropSettings()
+    var sharedCrop = CropSettings()
+    var sharedCropDraft = CropSettings()
+    var adjustments = ImageAdjustmentSettings()
     var cropAspectRatios = CropAspectRatio.presets
     var selectedCropAspectRatioID = "free"
-    var isCropAspectRatioLocked = false
     var message = "Choose images or use Photos > Image > Edit With > Negative Converter."
     var isLoadingPhotosLibrary = false
 
@@ -101,7 +113,7 @@ final class ConverterViewModel {
     }
 
     var originalImage: NSImage? {
-        selectedItem?.originalImage
+        selectedItem?.previewImage ?? selectedItem?.originalImage
     }
 
     var convertedImage: NSImage? {
@@ -124,8 +136,45 @@ final class ConverterViewModel {
         cropAspectRatios.first { $0.id == selectedCropAspectRatioID } ?? cropAspectRatios[0]
     }
 
+    var isCropAspectRatioLocked: Bool {
+        selectedCropAspectRatio.ratio != nil
+    }
+
     var selectedPhotosLibraryCollection: PhotosLibraryCollection? {
         photosLibraryCollections.first { $0.id == selectedPhotosCollectionID }
+    }
+
+    var hasSelectedItem: Bool {
+        selectedIndex != nil
+    }
+
+    var hasPendingCropChanges: Bool {
+        guard let selectedIndex else {
+            return false
+        }
+
+        return crop != effectiveCrop(for: selectedIndex)
+    }
+
+    var selectedSourceKind: BatchSourceKind {
+        guard let selectedItem else {
+            return .none
+        }
+
+        return selectedItem.isFromPhotosLibrary ? .photos : .files
+    }
+
+    var batchSourceKind: BatchSourceKind {
+        guard let firstItem = items.first else {
+            return .none
+        }
+
+        let firstIsPhotos = firstItem.isFromPhotosLibrary
+        if items.dropFirst().allSatisfy({ $0.isFromPhotosLibrary == firstIsPhotos }) {
+            return firstIsPhotos ? .photos : .files
+        }
+
+        return .mixed
     }
 
     func open(_ url: URL) {
@@ -141,15 +190,19 @@ final class ConverterViewModel {
 
         items = loadedItems
         selectedID = loadedItems.first?.id
+        sharedCrop = loadedItems.first?.crop ?? CropSettings()
+        sharedCropDraft = sharedCrop
+        crop = sharedCropDraft
         convertAll()
         message = loadedItems.count == 1 ? "Loaded \(loadedItems[0].fileName)." : "Loaded \(loadedItems.count) images."
     }
 
     func select(_ item: BatchImageItem) {
         selectedID = item.id
-        if isCropAspectRatioLocked {
-            crop = adjustedCrop(crop, changedEdge: nil)
-        }
+        let selectedCrop = item.usesSharedCrop ? sharedCropDraft : item.crop
+        crop = isCropAspectRatioLocked
+            ? adjustedCrop(selectedCrop, changedEdge: nil)
+            : selectedCrop
     }
 
     func convertSelected() {
@@ -198,65 +251,114 @@ final class ConverterViewModel {
             changedEdge = .bottom
         }
 
-        crop = adjustedCrop(nextCrop, changedEdge: changedEdge)
+        updateCropEditor(adjustedCrop(nextCrop, changedEdge: changedEdge))
     }
 
     func setCrop(_ crop: CropSettings) {
-        self.crop = adjustedCrop(CropSettings(
+        updateCropEditor(adjustedCrop(CropSettings(
             left: clampedCropValue(crop.left),
             top: clampedCropValue(crop.top),
             right: clampedCropValue(crop.right),
             bottom: clampedCropValue(crop.bottom)
-        ), changedEdge: nil)
+        ), changedEdge: nil))
     }
 
     func setCrop(_ crop: CropSettings, changedEdge: CropEdge) {
-        self.crop = adjustedCrop(CropSettings(
+        updateCropEditor(adjustedCrop(CropSettings(
             left: clampedCropValue(crop.left),
             top: clampedCropValue(crop.top),
             right: clampedCropValue(crop.right),
             bottom: clampedCropValue(crop.bottom)
-        ), changedEdge: changedEdge)
+        ), changedEdge: changedEdge))
     }
 
     func moveCrop(_ crop: CropSettings) {
-        self.crop = limitedCrop(CropSettings(
+        updateCropEditor(limitedCrop(CropSettings(
             left: clampedCropValue(crop.left),
             top: clampedCropValue(crop.top),
             right: clampedCropValue(crop.right),
             bottom: clampedCropValue(crop.bottom)
-        ))
+        )))
     }
 
     func selectCropAspectRatio(_ id: String) {
         selectedCropAspectRatioID = id
-        if selectedCropAspectRatio.ratio == nil {
-            isCropAspectRatioLocked = false
-        }
-
         if isCropAspectRatioLocked {
-            crop = adjustedCrop(crop, changedEdge: nil)
+            updateCropEditor(adjustedCrop(crop, changedEdge: nil))
         }
     }
 
-    func setCropAspectRatioLocked(_ isLocked: Bool) {
-        guard selectedCropAspectRatio.ratio != nil || !isLocked else {
-            isCropAspectRatioLocked = false
-            return
-        }
-
-        isCropAspectRatioLocked = isLocked
-        if isLocked {
-            crop = adjustedCrop(crop, changedEdge: nil)
-        }
-    }
-
-    func resetCrop() {
-        crop = CropSettings()
+    func setRotationDegrees(_ value: Double) {
+        adjustments.rotationDegrees = value
         convertAll()
     }
 
+    func setVerticalCorrectionDegrees(_ value: Double) {
+        adjustments.verticalCorrectionDegrees = value
+        convertAll()
+    }
+
+    func setHorizontalCorrectionDegrees(_ value: Double) {
+        adjustments.horizontalCorrectionDegrees = value
+        convertAll()
+    }
+
+    func toggleMirroring() {
+        adjustments.isMirroredHorizontally.toggle()
+        convertAll()
+    }
+
+    func resetAdjustments() {
+        adjustments = ImageAdjustmentSettings()
+        convertAll()
+    }
+
+    func resetCrop() {
+        guard let selectedIndex else {
+            return
+        }
+
+        let resetCrop = CropSettings()
+        items[selectedIndex].crop = resetCrop
+        items[selectedIndex].usesSharedCrop = false
+        crop = resetCrop
+        convertItem(at: selectedIndex)
+        message = "Reset crop for \(items[selectedIndex].fileName)."
+    }
+
+    func applyCropToSelected() {
+        guard let selectedIndex else {
+            return
+        }
+
+        items[selectedIndex].crop = crop
+        items[selectedIndex].usesSharedCrop = false
+        convertItem(at: selectedIndex)
+        message = crop.isIdentity
+            ? "Removed crop for \(items[selectedIndex].fileName)."
+            : "Applied crop to \(items[selectedIndex].fileName)."
+    }
+
+    func resetCropForAll() {
+        sharedCrop = CropSettings()
+        sharedCropDraft = sharedCrop
+        crop = sharedCropDraft
+        for index in items.indices {
+            items[index].crop = CropSettings()
+            items[index].usesSharedCrop = true
+        }
+
+        convertAll()
+        message = "Reset crop for all images."
+    }
+
     func applyCropToAll() {
+        sharedCrop = crop
+        sharedCropDraft = crop
+        for index in items.indices {
+            items[index].crop = crop
+            items[index].usesSharedCrop = true
+        }
         convertAll()
         message = crop.isIdentity ? "Crop reset and all images converted." : "Applied crop to \(items.count) image\(items.count == 1 ? "" : "s")."
     }
@@ -310,6 +412,27 @@ final class ConverterViewModel {
         }
 
         message = "Exported \(savedCount) positive image\(savedCount == 1 ? "" : "s")."
+    }
+
+    func exportSelectedToFolder() {
+        guard let selectedIndex else {
+            return
+        }
+
+        let panel = NSOpenPanel()
+        panel.canChooseDirectories = true
+        panel.canChooseFiles = false
+        panel.canCreateDirectories = true
+        panel.allowsMultipleSelection = false
+        panel.prompt = "Export"
+
+        guard panel.runModal() == .OK, let folderURL = panel.url else {
+            return
+        }
+
+        let outputURL = folderURL.appendingPathComponent(items[selectedIndex].outputFileName)
+        let didExport = saveFileItem(at: selectedIndex, to: outputURL)
+        message = didExport ? "Exported \(items[selectedIndex].fileName)." : "Export failed for \(items[selectedIndex].fileName)."
     }
 
     func loadPhotosLibrary() {
@@ -378,15 +501,22 @@ final class ConverterViewModel {
         message = "Importing \(selectedItems.count) Photos Library image\(selectedItems.count == 1 ? "" : "s")..."
 
         Task {
+            let resolvedTitles = await Self.fetchAssetTitles(for: selectedItems.map { $0.asset.localIdentifier })
             var loadedItems: [BatchImageItem] = []
-            for selectedItem in selectedItems {
-                if let batchItem = await loadBatchItem(from: selectedItem.asset, displayName: selectedItem.title) {
+            for (index, selectedItem) in selectedItems.enumerated() {
+                let resolvedTitle = resolvedTitles[selectedItem.asset.localIdentifier]
+                    ?? selectedItem.title
+
+                if let batchItem = await loadBatchItem(from: selectedItem.asset, displayName: resolvedTitle) {
                     loadedItems.append(batchItem)
                 }
             }
 
             items = loadedItems
             selectedID = loadedItems.first?.id
+            sharedCrop = loadedItems.first?.crop ?? CropSettings()
+            sharedCropDraft = sharedCrop
+            crop = sharedCropDraft
             selectedPhotosAssetIDs.removeAll()
             convertAll()
             isLoadingPhotosLibrary = false
@@ -419,15 +549,25 @@ final class ConverterViewModel {
             assetIdentifier: nil,
             displayName: url.lastPathComponent,
             originalImage: image,
+            previewImage: image,
             status: "Loaded"
         )
     }
 
     private func convertItem(at index: Int) {
         do {
-            items[index].convertedImage = try NegativeImageProcessor.invertedImage(from: items[index].originalImage, crop: crop)
+            items[index].previewImage = try NegativeImageProcessor.previewImage(
+                from: items[index].originalImage,
+                adjustments: adjustments
+            )
+            items[index].convertedImage = try NegativeImageProcessor.invertedImage(
+                from: items[index].originalImage,
+                crop: effectiveCrop(for: index),
+                adjustments: adjustments
+            )
             items[index].status = "Converted"
         } catch {
+            items[index].previewImage = items[index].originalImage
             items[index].convertedImage = nil
             items[index].status = "Conversion failed"
         }
@@ -435,6 +575,23 @@ final class ConverterViewModel {
 
     private func clampedCropValue(_ value: Double) -> Double {
         min(0.98, max(0, value))
+    }
+
+    private func effectiveCrop(for index: Int) -> CropSettings {
+        items[index].usesSharedCrop ? sharedCrop : items[index].crop
+    }
+
+    private func updateCropEditor(_ newCrop: CropSettings) {
+        crop = newCrop
+
+        guard let selectedIndex else {
+            sharedCropDraft = newCrop
+            return
+        }
+
+        if items[selectedIndex].usesSharedCrop {
+            sharedCropDraft = newCrop
+        }
     }
 
     private func limitedCrop(_ crop: CropSettings) -> CropSettings {
@@ -715,50 +872,10 @@ final class ConverterViewModel {
         }
 
         photosLibraryItems = assets.enumerated().map { index, asset in
-            PhotosLibraryItem(id: asset.localIdentifier, asset: asset, title: assetTitle(asset, fallbackIndex: index))
-        }
-
-        Task {
-            await loadThumbnails(for: collectionID, assets: assets)
+            PhotosLibraryItem(id: asset.localIdentifier, asset: asset, title: fallbackAssetTitle(asset, fallbackIndex: index))
         }
 
         return photosLibraryItems.count
-    }
-
-    private func loadThumbnails(for collectionID: String, assets: [PHAsset]) async {
-        let manager = PHCachingImageManager.default()
-        let requestOptions = PHImageRequestOptions()
-        requestOptions.deliveryMode = .fastFormat
-        requestOptions.resizeMode = .fast
-        requestOptions.isNetworkAccessAllowed = true
-
-        let targetSize = CGSize(width: 128, height: 128)
-        for asset in assets {
-            guard collectionID == selectedPhotosCollectionID else {
-                return
-            }
-
-            guard let thumbnail = await requestImage(for: asset, targetSize: targetSize, manager: manager, options: requestOptions),
-                  let itemIndex = photosLibraryItems.firstIndex(where: { $0.id == asset.localIdentifier }),
-                  collectionID == selectedPhotosCollectionID else {
-                continue
-            }
-
-            photosLibraryItems[itemIndex].thumbnail = thumbnail
-        }
-    }
-
-    private func requestImage(
-        for asset: PHAsset,
-        targetSize: CGSize,
-        manager: PHImageManager,
-        options: PHImageRequestOptions
-    ) async -> NSImage? {
-        await withCheckedContinuation { continuation in
-            manager.requestImage(for: asset, targetSize: targetSize, contentMode: .aspectFill, options: options) { image, _ in
-                continuation.resume(returning: image)
-            }
-        }
     }
 
     private func loadBatchItem(from asset: PHAsset, displayName: String) async -> BatchImageItem? {
@@ -768,18 +885,43 @@ final class ConverterViewModel {
             return nil
         }
 
-        let title = asset.creationDate.map(Self.photoDateFormatter.string(from:)) ?? displayName
         return BatchImageItem(
             url: nil,
             assetIdentifier: asset.localIdentifier,
-            displayName: title,
+            displayName: displayName,
             originalImage: image,
+            previewImage: image,
             status: "Loaded from Photos"
         )
     }
 
-    private func assetTitle(_ asset: PHAsset, fallbackIndex: Int) -> String {
-        asset.creationDate.map(Self.photoDateFormatter.string(from:)) ?? "Photo \(fallbackIndex + 1)"
+    private func fallbackAssetTitle(_ asset: PHAsset, fallbackIndex: Int) -> String {
+        return asset.creationDate.map(Self.photoDateFormatter.string(from:)) ?? "Photo \(fallbackIndex + 1)"
+    }
+
+    private nonisolated static func fetchAssetTitles(for assetIDs: [String]) async -> [String: String] {
+        await withCheckedContinuation { continuation in
+            DispatchQueue.global(qos: .userInitiated).async {
+                let result = PHAsset.fetchAssets(withLocalIdentifiers: assetIDs, options: nil)
+                var titles: [String: String] = [:]
+
+                result.enumerateObjects { asset, _, _ in
+                    guard let resource = PHAssetResource.assetResources(for: asset).first else {
+                        return
+                    }
+
+                    let filename = URL(fileURLWithPath: resource.originalFilename)
+                        .deletingPathExtension()
+                        .lastPathComponent
+
+                    if !filename.isEmpty {
+                        titles[asset.localIdentifier] = filename
+                    }
+                }
+
+                continuation.resume(returning: titles)
+            }
+        }
     }
 
     private func requestContentEditingInput(for asset: PHAsset) async -> PHContentEditingInput? {
