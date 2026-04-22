@@ -1,30 +1,44 @@
 # Negative Converter
 
-Negative Converter is a macOS app for converting black-and-white film negatives into positive images. It can run as a standalone app for batch processing and includes a Photos editing extension for use from Apple Photos.
+Negative Converter is a macOS app for converting black-and-white film negatives into positive images. It includes:
 
-## Features
+- a standalone Mac app for batch work
+- a Photos editing extension for single-image save-back from Apple Photos
+
+The current app is focused on a practical local workflow: import scans, adjust geometry, define a crop once, and save or export clean positive images.
+
+## Highlights
 
 - Open one or many image files from Finder.
-- Load images from the system Photos Library.
-- Invert black-and-white negatives into positives.
-- Batch-convert and save multiple selected images.
-- Crop a scanned negative once and apply the same crop across a batch.
-- Preview the crop on both the negative and positive image.
-- Drag crop edges directly on the image.
-- Move the whole crop selection across the photo.
-- Lock the crop to common negative formats, including 35mm, 6x4.5, 6x6, 6x7, and 4x5.
-- Automatically flip locked crop ratios for vertical photos.
-- Save file-based edits back to disk or write adjusted Photos Library assets through PhotoKit.
+- Browse and import from the system Photos Library.
+- Use the Photos editing extension through `Edit With` in Apple Photos.
+- Convert black-and-white negatives into positives locally on the Mac.
+- Review negative and positive previews side by side in the app.
+- Adjust rotation, vertical correction, horizontal correction, and mirroring.
+- Reuse one crop across a batch and override it for specific photos when needed.
+- Use aspect-ratio presets for common film formats.
+- Save back to the original source or export new files.
+
+## Project status
+
+This project is in an early release-preparation phase. The core workflows are already in place:
+
+- file import
+- Photos Library import
+- Photos extension editing
+- geometry adjustment
+- shared and per-photo crop workflows
+- save and export actions
 
 ## Requirements
 
 - macOS
 - Xcode
-- A configured Apple development team for signing the app and Photos extension
+- an Apple development team configured for signing the app and Photos extension
 
-## Building
+## Build
 
-Open `Negative Converter.xcodeproj` in Xcode and run the `Negative Converter` scheme.
+Open [Negative Converter.xcodeproj](/Users/michell/Documents/Xcode/Negative%20Converter/Negative%20Converter.xcodeproj) in Xcode and run the `Negative Converter` scheme.
 
 From Terminal:
 
@@ -32,17 +46,46 @@ From Terminal:
 xcodebuild -project "Negative Converter.xcodeproj" -scheme "Negative Converter" -configuration Debug build
 ```
 
-## Photos Library Access
+## How it works
 
-The standalone app reads from the system Photos Library through PhotoKit. If you use multiple Photos libraries, macOS exposes the one marked as the System Photo Library to PhotoKit.
+### Standalone app
 
-The Photos editing extension is available from Apple Photos through `Edit With` / `Bearbeiten mit`. Apple Photos sends one image at a time to editing extensions, so batch processing is handled by the standalone app.
+The standalone app is the main workspace for batch conversion.
+
+Typical flow:
+
+1. Open images from Finder or the Photos Library.
+2. Review the negative and positive previews.
+3. Adjust geometry in the right inspector.
+4. Define a crop and apply it to the current photo or the whole batch.
+5. Save back to the source or export new files.
+
+### Apple Photos extension
+
+The Photos extension is available through Apple Photos via `Edit With`.
+
+Apple Photos sends one image at a time to editing extensions, so the extension is best used for direct single-image save-back. Batch work is handled by the standalone app.
+
+## Photos Library access
+
+The standalone app uses PhotoKit to access the system Photos Library. If multiple Photos libraries exist on the Mac, PhotoKit exposes the library that is currently configured as the System Photo Library.
+
+The in-app picker supports:
+
+- album and smart-album browsing
+- search
+- multi-selection
+- Shift-click range selection
 
 ## Privacy
 
-Image processing happens locally on the Mac. The app does not upload photos to a remote service.
+Image processing happens locally on the Mac. The app does not upload images to a remote service.
 
-## Current Status
+## License
 
-This is an early working version focused on black-and-white negative inversion, batch handling, Photos Library access, and repeatable crop workflows.
+This project is licensed under the Mozilla Public License 2.0. See [LICENSE](/Users/michell/Documents/Xcode/Negative%20Converter/LICENSE).
 
+## Documentation
+
+- [Architecture](/Users/michell/Documents/Xcode/Negative%20Converter/docs/ARCHITECTURE.md)
+- [Functionality Guide](/Users/michell/Documents/Xcode/Negative%20Converter/docs/FUNCTIONALITY.md)

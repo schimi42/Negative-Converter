@@ -804,8 +804,12 @@ private struct PhotosLibrarySheet: View {
                                 PhotosLibraryGridItem(
                                     item: item,
                                     isSelected: viewModel.selectedPhotosAssetIDs.contains(item.id)
-                                ) {
-                                    viewModel.togglePhotosLibrarySelection(item)
+                                ) { isShiftSelecting in
+                                    if isShiftSelecting {
+                                        viewModel.selectPhotosLibraryRange(to: item, in: filteredItems)
+                                    } else {
+                                        viewModel.togglePhotosLibrarySelection(item)
+                                    }
                                 }
                             }
                         }
@@ -889,10 +893,13 @@ private struct PhotosLibrarySidebar: View {
 private struct PhotosLibraryGridItem: View {
     let item: PhotosLibraryItem
     let isSelected: Bool
-    let action: () -> Void
+    let action: (Bool) -> Void
 
     var body: some View {
-        Button(action: action) {
+        Button {
+            let isShiftSelecting = NSApp.currentEvent?.modifierFlags.contains(.shift) == true
+            action(isShiftSelecting)
+        } label: {
             ZStack(alignment: .bottomLeading) {
                 Rectangle()
                     .fill(Color(nsColor: .textBackgroundColor))

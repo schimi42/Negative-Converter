@@ -94,6 +94,7 @@ final class ConverterViewModel {
     var photosLibraryCollections: [PhotosLibraryCollection] = []
     var selectedPhotosCollectionID = "library.all"
     var selectedPhotosAssetIDs: Set<String> = []
+    var lastSelectedPhotosAssetID: String?
     var selectedID: BatchImageItem.ID?
     var crop = CropSettings()
     var sharedCrop = CropSettings()
@@ -453,6 +454,7 @@ final class ConverterViewModel {
                 selectedPhotosCollectionID = collections.first?.id ?? "library.all"
             }
             selectedPhotosAssetIDs.removeAll()
+            lastSelectedPhotosAssetID = nil
 
             let loadedCount = await loadPhotosLibraryItems(for: selectedPhotosCollectionID)
             isLoadingPhotosLibrary = false
@@ -467,6 +469,7 @@ final class ConverterViewModel {
 
         selectedPhotosCollectionID = collection.id
         selectedPhotosAssetIDs.removeAll()
+        lastSelectedPhotosAssetID = nil
         isLoadingPhotosLibrary = true
         photosLibraryItems = []
         message = "Loading \(collection.title)..."
@@ -488,6 +491,30 @@ final class ConverterViewModel {
         } else {
             selectedPhotosAssetIDs.insert(item.id)
         }
+
+        lastSelectedPhotosAssetID = item.id
+    }
+
+    func selectPhotosLibraryRange(to item: PhotosLibraryItem, in orderedItems: [PhotosLibraryItem]) {
+        guard let itemIndex = orderedItems.firstIndex(where: { $0.id == item.id }) else {
+            togglePhotosLibrarySelection(item)
+            return
+        }
+
+        guard let anchorID = lastSelectedPhotosAssetID,
+              let anchorIndex = orderedItems.firstIndex(where: { $0.id == anchorID }) else {
+            selectedPhotosAssetIDs.insert(item.id)
+            lastSelectedPhotosAssetID = item.id
+            return
+        }
+
+        let lowerBound = min(anchorIndex, itemIndex)
+        let upperBound = max(anchorIndex, itemIndex)
+        for selectedItem in orderedItems[lowerBound...upperBound] {
+            selectedPhotosAssetIDs.insert(selectedItem.id)
+        }
+
+        lastSelectedPhotosAssetID = item.id
     }
 
     func addSelectedPhotosToBatch() {
@@ -503,7 +530,7 @@ final class ConverterViewModel {
         Task {
             let resolvedTitles = await Self.fetchAssetTitles(for: selectedItems.map { $0.asset.localIdentifier })
             var loadedItems: [BatchImageItem] = []
-            for (index, selectedItem) in selectedItems.enumerated() {
+            for selectedItem in selectedItems {
                 let resolvedTitle = resolvedTitles[selectedItem.asset.localIdentifier]
                     ?? selectedItem.title
 
@@ -518,6 +545,7 @@ final class ConverterViewModel {
             sharedCropDraft = sharedCrop
             crop = sharedCropDraft
             selectedPhotosAssetIDs.removeAll()
+            lastSelectedPhotosAssetID = nil
             convertAll()
             isLoadingPhotosLibrary = false
             message = "Imported \(loadedItems.count) Photos Library image\(loadedItems.count == 1 ? "" : "s")."
