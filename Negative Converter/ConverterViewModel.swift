@@ -102,7 +102,7 @@ final class ConverterViewModel {
     var adjustments = ImageAdjustmentSettings()
     var cropAspectRatios = CropAspectRatio.presets
     var selectedCropAspectRatioID = "free"
-    var message = "Choose images or use Photos > Image > Edit With > Negative Converter."
+    var message = "Choose images or use Photos > Image > Edit With > Lumirio Negative Converter."
     var isLoadingPhotosLibrary = false
 
     var selectedItem: BatchImageItem? {

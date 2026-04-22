@@ -16,7 +16,7 @@
             <BuildableReference
                BuildableIdentifier = "primary"
                BlueprintIdentifier = "1217A62A2F954DB0000D930F"
-               BuildableName = "Negative Converter.app"
+               BuildableName = "Lumirio Negative Converter.app"
                BlueprintName = "Negative Converter"
                ReferencedContainer = "container:Negative Converter.xcodeproj">
             </BuildableReference>
@@ -45,7 +45,7 @@
          <BuildableReference
             BuildableIdentifier = "primary"
             BlueprintIdentifier = "1217A62A2F954DB0000D930F"
-            BuildableName = "Negative Converter.app"
+            BuildableName = "Lumirio Negative Converter.app"
             BlueprintName = "Negative Converter"
             ReferencedContainer = "container:Negative Converter.xcodeproj">
          </BuildableReference>
@@ -62,7 +62,7 @@
          <BuildableReference
             BuildableIdentifier = "primary"
             BlueprintIdentifier = "1217A62A2F954DB0000D930F"
-            BuildableName = "Negative Converter.app"
+            BuildableName = "Lumirio Negative Converter.app"
             BlueprintName = "Negative Converter"
             ReferencedContainer = "container:Negative Converter.xcodeproj">
          </BuildableReference>
