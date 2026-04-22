@@ -38,7 +38,7 @@ This project is in an early release-preparation phase. The core workflows are al
 
 ## Build
 
-Open [Negative Converter.xcodeproj](/Users/michell/Documents/Xcode/Negative%20Converter/Negative%20Converter.xcodeproj) in Xcode and run the `Negative Converter` scheme.
+Open [Negative Converter.xcodeproj](./Negative%20Converter.xcodeproj) in Xcode and run the `Negative Converter` scheme.
 
 From Terminal:
 
@@ -83,9 +83,9 @@ Image processing happens locally on the Mac. The app does not upload images to a
 
 ## License
 
-This project is licensed under the Mozilla Public License 2.0. See [LICENSE](/Users/michell/Documents/Xcode/Negative%20Converter/LICENSE).
+This project is licensed under the Mozilla Public License 2.0. See [LICENSE](./LICENSE).
 
 ## Documentation
 
-- [Architecture](/Users/michell/Documents/Xcode/Negative%20Converter/docs/ARCHITECTURE.md)
-- [Functionality Guide](/Users/michell/Documents/Xcode/Negative%20Converter/docs/FUNCTIONALITY.md)
+- [Architecture](./docs/ARCHITECTURE.md)
+- [Functionality Guide](./docs/FUNCTIONALITY.md)
