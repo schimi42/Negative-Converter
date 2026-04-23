@@ -309,8 +309,16 @@ final class ConverterViewModel {
         convertAll()
     }
 
+    func setTrueGrayscale(_ isEnabled: Bool) {
+        adjustments.isTrueGrayscale = isEnabled
+        convertAll()
+    }
+
     func resetAdjustments() {
-        adjustments = ImageAdjustmentSettings()
+        adjustments.rotationDegrees = 0
+        adjustments.verticalCorrectionDegrees = 0
+        adjustments.horizontalCorrectionDegrees = 0
+        adjustments.isMirroredHorizontally = false
         convertAll()
     }
 

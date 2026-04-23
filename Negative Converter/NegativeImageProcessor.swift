@@ -35,12 +35,14 @@ struct ImageAdjustmentSettings: Equatable {
     var verticalCorrectionDegrees: Double = 0
     var horizontalCorrectionDegrees: Double = 0
     var isMirroredHorizontally = false
+    var isTrueGrayscale = false
 
     var isIdentity: Bool {
         rotationDegrees == 0
         && verticalCorrectionDegrees == 0
         && horizontalCorrectionDegrees == 0
         && !isMirroredHorizontally
+        && !isTrueGrayscale
     }
 }
 
@@ -182,11 +184,12 @@ enum NegativeImageProcessor {
 
         let transformedImage = sourceImage.transformed(by: transform)
         let transformedExtent = transformedImage.extent.integral
-
-        return transformedImage.transformed(by: CGAffineTransform(
+        let normalizedImage = transformedImage.transformed(by: CGAffineTransform(
             translationX: -transformedExtent.minX,
             y: -transformedExtent.minY
         ))
+
+        return grayscaleImageIfNeeded(normalizedImage, adjustments: adjustments)
     }
 
     private static func croppedImage(_ image: CIImage, crop: CropSettings) -> CIImage {
@@ -211,5 +214,15 @@ enum NegativeImageProcessor {
         }
 
         return cgImage
+    }
+
+    private static func grayscaleImageIfNeeded(_ image: CIImage, adjustments: ImageAdjustmentSettings) -> CIImage {
+        guard adjustments.isTrueGrayscale else {
+            return image
+        }
+
+        return image.applyingFilter("CIColorControls", parameters: [
+            kCIInputSaturationKey: 0
+        ])
     }
 }

@@ -231,6 +231,19 @@ struct ContentView: View {
                         .frame(maxWidth: .infinity)
                 }
                 .disabled(viewModel.items.isEmpty || viewModel.items.allSatisfy(\.crop.isIdentity))
+
+                Divider()
+
+                VStack(alignment: .leading, spacing: 10) {
+                    Text("Processing")
+                        .font(.title3.weight(.semibold))
+
+                    Toggle("True Grayscale", isOn: Binding(
+                        get: { viewModel.adjustments.isTrueGrayscale },
+                        set: { viewModel.setTrueGrayscale($0) }
+                    ))
+                    .disabled(viewModel.items.isEmpty)
+                }
             }
             .padding(20)
         }
