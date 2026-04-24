@@ -10,42 +10,6 @@ import CoreImage
 import ImageIO
 import UniformTypeIdentifiers
 
-struct CropSettings: Equatable {
-    var left: Double = 0
-    var top: Double = 0
-    var right: Double = 0
-    var bottom: Double = 0
-
-    var isIdentity: Bool {
-        left == 0 && top == 0 && right == 0 && bottom == 0
-    }
-
-    var normalizedRect: CGRect {
-        CGRect(
-            x: left,
-            y: top,
-            width: max(0.01, 1 - left - right),
-            height: max(0.01, 1 - top - bottom)
-        )
-    }
-}
-
-struct ImageAdjustmentSettings: Equatable {
-    var rotationDegrees: Double = 0
-    var verticalCorrectionDegrees: Double = 0
-    var horizontalCorrectionDegrees: Double = 0
-    var isMirroredHorizontally = false
-    var isTrueGrayscale = false
-
-    var isIdentity: Bool {
-        rotationDegrees == 0
-        && verticalCorrectionDegrees == 0
-        && horizontalCorrectionDegrees == 0
-        && !isMirroredHorizontally
-        && !isTrueGrayscale
-    }
-}
-
 enum NegativeImageProcessorError: LocalizedError {
     case couldNotReadImage
     case couldNotRenderImage
@@ -63,16 +27,37 @@ enum NegativeImageProcessorError: LocalizedError {
 enum NegativeImageProcessor {
     private static let context = CIContext(options: [.workingColorSpace: CGColorSpace(name: CGColorSpace.sRGB) as Any])
 
-    static func previewImage(
-        from image: NSImage,
+    static func previewCGImage(
+        from image: CGImage,
         adjustments: ImageAdjustmentSettings = ImageAdjustmentSettings()
-    ) throws -> NSImage {
-        let cgImage = try renderedCGImage(
+    ) throws -> CGImage {
+        try renderedCGImage(
             from: image,
             crop: CropSettings(),
             adjustments: adjustments,
             shouldInvert: false
         )
+    }
+
+    static func invertedCGImage(
+        from image: CGImage,
+        crop: CropSettings = CropSettings(),
+        adjustments: ImageAdjustmentSettings = ImageAdjustmentSettings()
+    ) throws -> CGImage {
+        try renderedCGImage(
+            from: image,
+            crop: crop,
+            adjustments: adjustments,
+            shouldInvert: true
+        )
+    }
+
+    static func previewImage(
+        from image: NSImage,
+        adjustments: ImageAdjustmentSettings = ImageAdjustmentSettings()
+    ) throws -> NSImage {
+        let sourceImage = try cgImage(from: image)
+        let cgImage = try previewCGImage(from: sourceImage, adjustments: adjustments)
         return NSImage(cgImage: cgImage, size: NSSize(width: cgImage.width, height: cgImage.height))
     }
 
@@ -81,12 +66,8 @@ enum NegativeImageProcessor {
         crop: CropSettings = CropSettings(),
         adjustments: ImageAdjustmentSettings = ImageAdjustmentSettings()
     ) throws -> NSImage {
-        let cgImage = try renderedCGImage(
-            from: image,
-            crop: crop,
-            adjustments: adjustments,
-            shouldInvert: true
-        )
+        let sourceImage = try cgImage(from: image)
+        let cgImage = try invertedCGImage(from: sourceImage, crop: crop, adjustments: adjustments)
         return NSImage(cgImage: cgImage, size: NSSize(width: cgImage.width, height: cgImage.height))
     }
 
@@ -119,7 +100,7 @@ enum NegativeImageProcessor {
     }
 
     static func write(_ image: NSImage, to url: URL, as outputType: UTType) throws {
-        let cgImage = try invertedSourceIfNeeded(image)
+        let cgImage = try cgImage(from: image)
         let destinationType = outputType.identifier as CFString
 
         guard let destination = CGImageDestinationCreateWithURL(url as CFURL, destinationType, 1, nil) else {
@@ -134,7 +115,7 @@ enum NegativeImageProcessor {
     }
 
     private static func renderedCGImage(
-        from image: NSImage,
+        from image: CGImage,
         crop: CropSettings,
         adjustments: ImageAdjustmentSettings,
         shouldInvert: Bool
@@ -151,11 +132,10 @@ enum NegativeImageProcessor {
     }
 
     private static func preparedImage(
-        from image: NSImage,
+        from image: CGImage,
         adjustments: ImageAdjustmentSettings
     ) throws -> CIImage {
-        let cgImage = try invertedSourceIfNeeded(image)
-        let sourceImage = CIImage(cgImage: cgImage)
+        let sourceImage = CIImage(cgImage: image)
         guard !adjustments.isIdentity else {
             return sourceImage
         }
@@ -207,7 +187,7 @@ enum NegativeImageProcessor {
         return image.cropped(to: cropRect)
     }
 
-    private static func invertedSourceIfNeeded(_ image: NSImage) throws -> CGImage {
+    private static func cgImage(from image: NSImage) throws -> CGImage {
         var proposedRect = NSRect(origin: .zero, size: image.size)
         guard let cgImage = image.cgImage(forProposedRect: &proposedRect, context: nil, hints: nil) else {
             throw NegativeImageProcessorError.couldNotReadImage

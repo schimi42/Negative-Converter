@@ -10,6 +10,8 @@
 		1217A6402F954DB1000D930F /* Negative Converter Photos Extension.appex in Embed App Extensions */ = {isa = PBXBuildFile; fileRef = 1217A6412F954DB1000D930F /* Negative Converter Photos Extension.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 		1217A6462F954DB1000D930F /* Negative Converter Photos Extension/PhotoEditingViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1217A6452F954DB1000D930F /* Negative Converter Photos Extension/PhotoEditingViewController.swift */; };
 		1217A6472F954DB1000D930F /* Shared/Processing/NegativeImageProcessor.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1217A6422F954DB1000D930F /* Shared/Processing/NegativeImageProcessor.swift */; };
+		12B1C8012F9B000100000001 /* Shared/Models/CropSettings.swift in Sources */ = {isa = PBXBuildFile; fileRef = 12B1C8032F9B000100000001 /* Shared/Models/CropSettings.swift */; };
+		12B1C8022F9B000100000001 /* Shared/Models/ImageAdjustmentSettings.swift in Sources */ = {isa = PBXBuildFile; fileRef = 12B1C8042F9B000100000001 /* Shared/Models/ImageAdjustmentSettings.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -39,9 +41,11 @@
 /* Begin PBXFileReference section */
 		1217A62B2F954DB0000D930F /* Lumirio Negative Converter.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "Lumirio Negative Converter.app"; sourceTree = BUILT_PRODUCTS_DIR; };
 		1217A6412F954DB1000D930F /* Negative Converter Photos Extension.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = "Negative Converter Photos Extension.appex"; sourceTree = BUILT_PRODUCTS_DIR; };
-		1217A6422F954DB1000D930F /* Shared/Processing/NegativeImageProcessor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Shared/Processing/NegativeImageProcessor.swift"; sourceTree = "<group>"; };
+		1217A6422F954DB1000D930F /* Shared/Processing/NegativeImageProcessor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Shared/Processing/NegativeImageProcessor.swift; sourceTree = "<group>"; };
 		1217A6442F954DB1000D930F /* Negative Converter Photos Extension */ = {isa = PBXFileReference; lastKnownFileType = folder; path = "Negative Converter Photos Extension"; sourceTree = "<group>"; };
 		1217A6452F954DB1000D930F /* Negative Converter Photos Extension/PhotoEditingViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Negative Converter Photos Extension/PhotoEditingViewController.swift"; sourceTree = "<group>"; };
+		12B1C8032F9B000100000001 /* Shared/Models/CropSettings.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Shared/Models/CropSettings.swift; sourceTree = "<group>"; };
+		12B1C8042F9B000100000001 /* Shared/Models/ImageAdjustmentSettings.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Shared/Models/ImageAdjustmentSettings.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
@@ -113,6 +117,8 @@
 			children = (
 				1217A6452F954DB1000D930F /* Negative Converter Photos Extension/PhotoEditingViewController.swift */,
 				1217A6422F954DB1000D930F /* Shared/Processing/NegativeImageProcessor.swift */,
+				12B1C8032F9B000100000001 /* Shared/Models/CropSettings.swift */,
+				12B1C8042F9B000100000001 /* Shared/Models/ImageAdjustmentSettings.swift */,
 			);
 			name = "Recovered References";
 			sourceTree = "<group>";
@@ -232,6 +238,8 @@
 			buildActionMask = 2147483647;
 			files = (
 				1217A6462F954DB1000D930F /* Negative Converter Photos Extension/PhotoEditingViewController.swift in Sources */,
+				12B1C8012F9B000100000001 /* Shared/Models/CropSettings.swift in Sources */,
+				12B1C8022F9B000100000001 /* Shared/Models/ImageAdjustmentSettings.swift in Sources */,
 				1217A6472F954DB1000D930F /* Shared/Processing/NegativeImageProcessor.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;

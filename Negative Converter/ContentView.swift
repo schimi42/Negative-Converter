@@ -372,7 +372,7 @@ private struct BatchRow: View {
                 RoundedRectangle(cornerRadius: 6)
                     .fill(Color(nsColor: .textBackgroundColor))
 
-                Image(nsImage: item.originalImage)
+                Image(decorative: item.originalCGImage, scale: 1)
                     .resizable()
                     .scaledToFill()
                     .frame(width: 34, height: 34)
@@ -511,7 +511,14 @@ private struct BatchThumbnailCell: View {
                     Rectangle()
                         .fill(Color(nsColor: .textBackgroundColor))
 
-                    FittedImageView(image: item.originalImage, crop: crop, showsCrop: true)
+                    FittedImageView(
+                        image: NSImage(
+                            cgImage: item.originalCGImage,
+                            size: NSSize(width: item.originalCGImage.width, height: item.originalCGImage.height)
+                        ),
+                        crop: crop,
+                        showsCrop: true
+                    )
                         .padding(4)
                 }
                 .aspectRatio(1, contentMode: .fit)

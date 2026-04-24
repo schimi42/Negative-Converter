@@ -10,85 +10,9 @@ import Observation
 import Photos
 import UniformTypeIdentifiers
 
-struct BatchImageItem: Identifiable {
-    let id = UUID()
-    let url: URL?
-    let assetIdentifier: String?
-    var displayName: String
-    var originalImage: NSImage
-    var previewImage: NSImage?
-    var convertedImage: NSImage?
-    var crop: CropSettings = CropSettings()
-    var usesSharedCrop = true
-    var status: String
-
-    var fileName: String {
-        displayName
-    }
-
-    var outputFileName: String {
-        let sourceName = url?.deletingPathExtension().lastPathComponent ?? displayName
-        let baseName = sourceName.replacingOccurrences(of: " ", with: "-")
-        return "\(baseName)-positive.png"
-    }
-
-    var isFromPhotosLibrary: Bool {
-        assetIdentifier != nil
-    }
-}
-
-struct PhotosLibraryItem: Identifiable {
-    let id: String
-    let asset: PHAsset
-    var thumbnail: NSImage?
-    var title: String
-}
-
-struct PhotosLibraryCollection: Identifiable {
-    enum Source {
-        case allPhotos
-        case assetCollection(String)
-    }
-
-    let id: String
-    let title: String
-    let systemImage: String
-    let section: String
-    let source: Source
-}
-
-struct CropAspectRatio: Identifiable, Equatable {
-    let id: String
-    let title: String
-    let ratio: Double?
-
-    static let presets = [
-        CropAspectRatio(id: "free", title: "Free", ratio: nil),
-        CropAspectRatio(id: "35mm-3x2", title: "35mm / 6x9 (3:2)", ratio: 3.0 / 2.0),
-        CropAspectRatio(id: "645-4x3", title: "6x4.5 (4:3)", ratio: 4.0 / 3.0),
-        CropAspectRatio(id: "6x6-1x1", title: "6x6 (1:1)", ratio: 1.0),
-        CropAspectRatio(id: "6x7-7x6", title: "6x7 (7:6)", ratio: 7.0 / 6.0),
-        CropAspectRatio(id: "4x5-5x4", title: "4x5 (5:4)", ratio: 5.0 / 4.0)
-    ]
-}
-
-enum CropEdge {
-    case left
-    case top
-    case right
-    case bottom
-}
-
 @Observable
 @MainActor
 final class ConverterViewModel {
-    enum BatchSourceKind {
-        case none
-        case files
-        case photos
-        case mixed
-    }
-
     var items: [BatchImageItem] = []
     var photosLibraryItems: [PhotosLibraryItem] = []
     var photosLibraryCollections: [PhotosLibraryCollection] = []
@@ -114,11 +38,19 @@ final class ConverterViewModel {
     }
 
     var originalImage: NSImage? {
-        selectedItem?.previewImage ?? selectedItem?.originalImage
+        guard let selectedItem else {
+            return nil
+        }
+
+        return Self.nsImage(from: selectedItem.previewCGImage ?? selectedItem.originalCGImage)
     }
 
     var convertedImage: NSImage? {
-        selectedItem?.convertedImage
+        guard let convertedCGImage = selectedItem?.convertedCGImage else {
+            return nil
+        }
+
+        return Self.nsImage(from: convertedCGImage)
     }
 
     var openedURL: URL? {
@@ -126,7 +58,7 @@ final class ConverterViewModel {
     }
 
     var canSave: Bool {
-        items.contains { $0.convertedImage != nil }
+        items.contains { $0.convertedCGImage != nil }
     }
 
     var hasPhotosLibrarySelection: Bool {
@@ -224,7 +156,7 @@ final class ConverterViewModel {
             convertItem(at: index)
         }
 
-        let failures = items.filter { $0.convertedImage == nil }.count
+        let failures = items.filter { $0.convertedCGImage == nil }.count
         if failures == 0 {
             message = "Converted \(items.count) image\(items.count == 1 ? "" : "s")."
         } else {
@@ -576,7 +508,8 @@ final class ConverterViewModel {
             }
         }
 
-        guard let image = NSImage(contentsOf: url) else {
+        guard let image = NSImage(contentsOf: url),
+              let cgImage = Self.cgImage(from: image) else {
             return nil
         }
 
@@ -584,27 +517,29 @@ final class ConverterViewModel {
             url: url,
             assetIdentifier: nil,
             displayName: url.lastPathComponent,
-            originalImage: image,
-            previewImage: image,
+            originalCGImage: cgImage,
+            previewCGImage: cgImage,
             status: "Loaded"
         )
     }
 
     private func convertItem(at index: Int) {
         do {
-            items[index].previewImage = try NegativeImageProcessor.previewImage(
-                from: items[index].originalImage,
+            let previewCGImage = try NegativeImageProcessor.previewCGImage(
+                from: items[index].originalCGImage,
                 adjustments: adjustments
             )
-            items[index].convertedImage = try NegativeImageProcessor.invertedImage(
-                from: items[index].originalImage,
+            let convertedCGImage = try NegativeImageProcessor.invertedCGImage(
+                from: items[index].originalCGImage,
                 crop: effectiveCrop(for: index),
                 adjustments: adjustments
             )
+            items[index].previewCGImage = previewCGImage
+            items[index].convertedCGImage = convertedCGImage
             items[index].status = "Converted"
         } catch {
-            items[index].previewImage = items[index].originalImage
-            items[index].convertedImage = nil
+            items[index].previewCGImage = items[index].originalCGImage
+            items[index].convertedCGImage = nil
             items[index].status = "Conversion failed"
         }
     }
@@ -657,14 +592,16 @@ final class ConverterViewModel {
     private var lockedNormalizedCropRatio: Double? {
         guard isCropAspectRatioLocked,
               let targetPixelRatio = selectedCropAspectRatio.ratio,
-              let imageSize = originalImage?.size,
-              imageSize.width > 0,
-              imageSize.height > 0 else {
+              let image = selectedItem?.previewCGImage ?? selectedItem?.originalCGImage,
+              image.width > 0,
+              image.height > 0 else {
             return nil
         }
 
-        let orientedTargetRatio = imageSize.height > imageSize.width ? 1 / targetPixelRatio : targetPixelRatio
-        return orientedTargetRatio / (imageSize.width / imageSize.height)
+        let imageWidth = Double(image.width)
+        let imageHeight = Double(image.height)
+        let orientedTargetRatio = imageHeight > imageWidth ? 1 / targetPixelRatio : targetPixelRatio
+        return orientedTargetRatio / (imageWidth / imageHeight)
     }
 
     private func enforceAspectRatio(_ targetRatio: Double, on crop: CropSettings, changedEdge: CropEdge?) -> CropSettings {
@@ -739,7 +676,7 @@ final class ConverterViewModel {
 
     @discardableResult
     private func saveFileItem(at index: Int, to url: URL) -> Bool {
-        guard let convertedImage = items[index].convertedImage else {
+        guard let convertedCGImage = items[index].convertedCGImage else {
             items[index].status = "Not converted"
             return false
         }
@@ -752,7 +689,7 @@ final class ConverterViewModel {
                 }
             }
 
-            try NegativeImageProcessor.write(convertedImage, to: url)
+            try NegativeImageProcessor.write(Self.nsImage(from: convertedCGImage), to: url)
             items[index].status = "Saved"
             return true
         } catch {
@@ -762,7 +699,7 @@ final class ConverterViewModel {
     }
 
     private func savePhotosLibraryItem(at index: Int, assetIdentifier: String) async -> Bool {
-        guard let convertedImage = items[index].convertedImage else {
+        guard let convertedCGImage = items[index].convertedCGImage else {
             items[index].status = "Not converted"
             return false
         }
@@ -782,7 +719,7 @@ final class ConverterViewModel {
 
         do {
             let outputURL = (try? output.renderedContentURL(for: .jpeg)) ?? output.renderedContentURL
-            try NegativeImageProcessor.write(convertedImage, to: outputURL, as: .jpeg)
+            try NegativeImageProcessor.write(Self.nsImage(from: convertedCGImage), to: outputURL, as: .jpeg)
         } catch {
             items[index].status = "Render failed"
             return false
@@ -917,7 +854,8 @@ final class ConverterViewModel {
     private func loadBatchItem(from asset: PHAsset, displayName: String) async -> BatchImageItem? {
         guard let input = await requestContentEditingInput(for: asset),
               let url = input.fullSizeImageURL,
-              let image = NSImage(contentsOf: url) else {
+              let image = NSImage(contentsOf: url),
+              let cgImage = Self.cgImage(from: image) else {
             return nil
         }
 
@@ -925,10 +863,19 @@ final class ConverterViewModel {
             url: nil,
             assetIdentifier: asset.localIdentifier,
             displayName: displayName,
-            originalImage: image,
-            previewImage: image,
+            originalCGImage: cgImage,
+            previewCGImage: cgImage,
             status: "Loaded from Photos"
         )
+    }
+
+    private nonisolated static func cgImage(from image: NSImage) -> CGImage? {
+        var proposedRect = NSRect(origin: .zero, size: image.size)
+        return image.cgImage(forProposedRect: &proposedRect, context: nil, hints: nil)
+    }
+
+    private nonisolated static func nsImage(from cgImage: CGImage) -> NSImage {
+        NSImage(cgImage: cgImage, size: NSSize(width: cgImage.width, height: cgImage.height))
     }
 
     private func fallbackAssetTitle(_ asset: PHAsset, fallbackIndex: Int) -> String {

@@ -48,10 +48,28 @@ The main app is intentionally small and centered around a straightforward SwiftU
     - geometry adjustment values
     - save and export actions
   - Acts as the boundary between UI events and image-processing or PhotoKit operations.
+- `PhotosLibraryModels.swift`
+  - macOS app-side models for the custom Photos Library picker.
+  - Kept outside shared code because they depend on PhotoKit and AppKit thumbnail types.
 
 ## Shared code
 
 The shared area contains code that should remain independent from a specific app surface where possible.
+
+### Models
+
+- `Shared/Models/CropSettings.swift`
+  - Stores normalized crop values used by the crop editor and processing pipeline.
+- `Shared/Models/ImageAdjustmentSettings.swift`
+  - Stores geometry and processing adjustments such as rotation, correction, mirroring, and grayscale output.
+- `Shared/Models/BatchImageItem.swift`
+  - Stores the platform-neutral image batch item state using `CGImage`.
+- `Shared/Models/BatchSourceKind.swift`
+  - Describes whether the current batch is file-based, Photos-based, mixed, or empty.
+- `Shared/Models/CropAspectRatio.swift`
+  - Defines reusable crop aspect-ratio presets.
+- `Shared/Models/CropEdge.swift`
+  - Identifies the crop edge being edited by the UI.
 
 ### Image processing
 
