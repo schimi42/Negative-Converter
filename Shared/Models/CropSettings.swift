@@ -7,7 +7,7 @@
 
 import CoreGraphics
 
-struct CropSettings: Equatable {
+nonisolated struct CropSettings: Equatable {
     var left: Double = 0
     var top: Double = 0
     var right: Double = 0

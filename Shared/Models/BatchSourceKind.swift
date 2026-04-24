@@ -5,7 +5,7 @@
 //  Created by Michell Schimanski on 19.04.26.
 //
 
-enum BatchSourceKind {
+nonisolated enum BatchSourceKind {
     case none
     case files
     case photos

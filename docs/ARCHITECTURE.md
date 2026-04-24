@@ -83,6 +83,28 @@ The shared area contains code that should remain independent from a specific app
   - This file is the best place for future work on image quality, inversion tuning, and output formats.
   - It is currently shared by the main macOS app and the Photos editing extension.
 
+### Platform Abstractions
+
+- `Shared/Platform/ImageFileClient.swift`
+  - Defines the URL-based image loading and writing boundary.
+  - The current `LocalImageFileClient` implementation uses `CGImage` and security-scoped URL access.
+  - Future iOS/iPadOS import and export flows can provide their own file-client behavior behind the same interface.
+
+- `Negative Converter/PhotosLibraryClient.swift`
+  - Defines the Photos Library access boundary used by the main app view model.
+  - The current `PhotoKitLibraryClient` implementation owns PhotoKit authorization, collection fetching, asset title lookup, content editing input URLs, and write-back to Photos.
+  - Future iOS/iPadOS work can swap or adapt this layer without spreading platform-specific Photos behavior through the main conversion workflow.
+
+- `Negative Converter/PhotosThumbnailClient.swift`
+  - Defines the thumbnail loading boundary for Photos Library picker items.
+  - The current `PhotoKitThumbnailClient` implementation owns `PHCachingImageManager` usage and returns `CGImage` thumbnails for SwiftUI presentation.
+  - This keeps the picker UI from reaching directly into PhotoKit thumbnail APIs.
+
+- `Negative Converter/FileDialogClient.swift`
+  - Defines the platform dialog boundary for choosing export destinations.
+  - The current `AppKitFileDialogClient` implementation owns the macOS `NSOpenPanel` configuration used to select an export folder.
+  - Image opening currently stays in the SwiftUI view via `.fileImporter`, while export destination selection is kept out of the main view model.
+
 ### Assets and entitlements
 
 - `Assets.xcassets`

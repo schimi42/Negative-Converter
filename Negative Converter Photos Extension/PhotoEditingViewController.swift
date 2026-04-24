@@ -52,8 +52,12 @@ final class PhotoEditingViewController: NSViewController, PHContentEditingContro
 
         if let fullSizeImageURL = contentEditingInput.fullSizeImageURL,
            let preview = NSImage(contentsOf: fullSizeImageURL),
-           let invertedPreview = try? NegativeImageProcessor.invertedImage(from: preview) {
-            imageView.image = invertedPreview
+           let previewCGImage = preview.cgImage,
+           let invertedPreview = try? NegativeImageProcessor.invertedCGImage(from: previewCGImage) {
+            imageView.image = NSImage(
+                cgImage: invertedPreview,
+                size: NSSize(width: invertedPreview.width, height: invertedPreview.height)
+            )
             statusLabel.stringValue = "Positive preview ready. Click Save Changes in Photos."
         }
     }
@@ -91,4 +95,11 @@ final class PhotoEditingViewController: NSViewController, PHContentEditingContro
     }
 
     private static let adjustmentFormatIdentifier = "de.lumirio.Negative-Converter.invert"
+}
+
+private extension NSImage {
+    var cgImage: CGImage? {
+        var proposedRect = NSRect(origin: .zero, size: size)
+        return cgImage(forProposedRect: &proposedRect, context: nil, hints: nil)
+    }
 }

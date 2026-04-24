@@ -5,20 +5,19 @@
 //  Created by Michell Schimanski on 19.04.26.
 //
 
-import AppKit
+import CoreGraphics
 import Observation
-import Photos
 import UniformTypeIdentifiers
 
 @Observable
 @MainActor
 final class ConverterViewModel {
+    private let imageFileClient: ImageFileClient
+    private let photosLibraryClient: PhotosLibraryClient
+    private let fileDialogClient: FileDialogClient
+
     var items: [BatchImageItem] = []
-    var photosLibraryItems: [PhotosLibraryItem] = []
-    var photosLibraryCollections: [PhotosLibraryCollection] = []
-    var selectedPhotosCollectionID = "library.all"
-    var selectedPhotosAssetIDs: Set<String> = []
-    var lastSelectedPhotosAssetID: String?
+    var photosLibraryPicker = PhotosLibraryPickerState()
     var selectedID: BatchImageItem.ID?
     var crop = CropSettings()
     var sharedCrop = CropSettings()
@@ -27,7 +26,16 @@ final class ConverterViewModel {
     var cropAspectRatios = CropAspectRatio.presets
     var selectedCropAspectRatioID = "free"
     var message = "Choose images or use Photos > Image > Edit With > Lumirio Negative Converter."
-    var isLoadingPhotosLibrary = false
+
+    init(
+        imageFileClient: ImageFileClient = LocalImageFileClient(),
+        photosLibraryClient: PhotosLibraryClient = PhotoKitLibraryClient(),
+        fileDialogClient: FileDialogClient = AppKitFileDialogClient()
+    ) {
+        self.imageFileClient = imageFileClient
+        self.photosLibraryClient = photosLibraryClient
+        self.fileDialogClient = fileDialogClient
+    }
 
     var selectedItem: BatchImageItem? {
         guard let selectedID else {
@@ -37,20 +45,16 @@ final class ConverterViewModel {
         return items.first { $0.id == selectedID } ?? items.first
     }
 
-    var originalImage: NSImage? {
+    var originalDisplayImage: CGImage? {
         guard let selectedItem else {
             return nil
         }
 
-        return Self.nsImage(from: selectedItem.previewCGImage ?? selectedItem.originalCGImage)
+        return selectedItem.previewCGImage ?? selectedItem.originalCGImage
     }
 
-    var convertedImage: NSImage? {
-        guard let convertedCGImage = selectedItem?.convertedCGImage else {
-            return nil
-        }
-
-        return Self.nsImage(from: convertedCGImage)
+    var convertedDisplayImage: CGImage? {
+        selectedItem?.convertedCGImage
     }
 
     var openedURL: URL? {
@@ -62,7 +66,7 @@ final class ConverterViewModel {
     }
 
     var hasPhotosLibrarySelection: Bool {
-        !selectedPhotosAssetIDs.isEmpty
+        photosLibraryPicker.hasSelection
     }
 
     var selectedCropAspectRatio: CropAspectRatio {
@@ -74,7 +78,7 @@ final class ConverterViewModel {
     }
 
     var selectedPhotosLibraryCollection: PhotosLibraryCollection? {
-        photosLibraryCollections.first { $0.id == selectedPhotosCollectionID }
+        photosLibraryPicker.selectedCollection
     }
 
     var hasSelectedItem: Bool {
@@ -333,14 +337,7 @@ final class ConverterViewModel {
     }
 
     func exportAllToFolder() {
-        let panel = NSOpenPanel()
-        panel.canChooseDirectories = true
-        panel.canChooseFiles = false
-        panel.canCreateDirectories = true
-        panel.allowsMultipleSelection = false
-        panel.prompt = "Export"
-
-        guard panel.runModal() == .OK, let folderURL = panel.url else {
+        guard let folderURL = fileDialogClient.selectExportFolder() else {
             return
         }
 
@@ -360,14 +357,7 @@ final class ConverterViewModel {
             return
         }
 
-        let panel = NSOpenPanel()
-        panel.canChooseDirectories = true
-        panel.canChooseFiles = false
-        panel.canCreateDirectories = true
-        panel.allowsMultipleSelection = false
-        panel.prompt = "Export"
-
-        guard panel.runModal() == .OK, let folderURL = panel.url else {
+        guard let folderURL = fileDialogClient.selectExportFolder() else {
             return
         }
 
@@ -377,104 +367,78 @@ final class ConverterViewModel {
     }
 
     func loadPhotosLibrary() {
-        isLoadingPhotosLibrary = true
+        photosLibraryPicker.isLoading = true
         message = "Loading Photos Library..."
 
         Task {
-            let status = await requestPhotosAuthorization()
-            guard status == .authorized || status == .limited else {
-                isLoadingPhotosLibrary = false
+            let status = await photosLibraryClient.requestAuthorization()
+            guard status == .available else {
+                photosLibraryPicker.isLoading = false
                 message = "Photos Library access was not granted."
                 return
             }
 
-            let collections = fetchPhotosLibraryCollections()
-            photosLibraryCollections = collections
-            if !collections.contains(where: { $0.id == selectedPhotosCollectionID }) {
-                selectedPhotosCollectionID = collections.first?.id ?? "library.all"
+            let collections = photosLibraryClient.fetchCollections()
+            photosLibraryPicker.collections = collections
+            if !collections.contains(where: { $0.id == photosLibraryPicker.selectedCollectionID }) {
+                photosLibraryPicker.selectedCollectionID = collections.first?.id ?? "library.all"
             }
-            selectedPhotosAssetIDs.removeAll()
-            lastSelectedPhotosAssetID = nil
+            photosLibraryPicker.clearSelection()
 
-            let loadedCount = await loadPhotosLibraryItems(for: selectedPhotosCollectionID)
-            isLoadingPhotosLibrary = false
+            let loadedCount = await loadPhotosLibraryItems(for: photosLibraryPicker.selectedCollectionID)
+            photosLibraryPicker.isLoading = false
             message = "Loaded \(loadedCount) Photos Library image\(loadedCount == 1 ? "" : "s")."
         }
     }
 
     func selectPhotosLibraryCollection(_ collection: PhotosLibraryCollection) {
-        guard collection.id != selectedPhotosCollectionID else {
+        guard collection.id != photosLibraryPicker.selectedCollectionID else {
             return
         }
 
-        selectedPhotosCollectionID = collection.id
-        selectedPhotosAssetIDs.removeAll()
-        lastSelectedPhotosAssetID = nil
-        isLoadingPhotosLibrary = true
-        photosLibraryItems = []
+        photosLibraryPicker.selectedCollectionID = collection.id
+        photosLibraryPicker.clearSelection()
+        photosLibraryPicker.isLoading = true
+        photosLibraryPicker.items = []
         message = "Loading \(collection.title)..."
 
         Task {
             let loadedCount = await loadPhotosLibraryItems(for: collection.id)
-            guard collection.id == selectedPhotosCollectionID else {
+            guard collection.id == photosLibraryPicker.selectedCollectionID else {
                 return
             }
 
-            isLoadingPhotosLibrary = false
+            photosLibraryPicker.isLoading = false
             message = "Loaded \(loadedCount) image\(loadedCount == 1 ? "" : "s") from \(collection.title)."
         }
     }
 
     func togglePhotosLibrarySelection(_ item: PhotosLibraryItem) {
-        if selectedPhotosAssetIDs.contains(item.id) {
-            selectedPhotosAssetIDs.remove(item.id)
-        } else {
-            selectedPhotosAssetIDs.insert(item.id)
-        }
-
-        lastSelectedPhotosAssetID = item.id
+        photosLibraryPicker.toggleSelection(item)
     }
 
     func selectPhotosLibraryRange(to item: PhotosLibraryItem, in orderedItems: [PhotosLibraryItem]) {
-        guard let itemIndex = orderedItems.firstIndex(where: { $0.id == item.id }) else {
-            togglePhotosLibrarySelection(item)
-            return
-        }
-
-        guard let anchorID = lastSelectedPhotosAssetID,
-              let anchorIndex = orderedItems.firstIndex(where: { $0.id == anchorID }) else {
-            selectedPhotosAssetIDs.insert(item.id)
-            lastSelectedPhotosAssetID = item.id
-            return
-        }
-
-        let lowerBound = min(anchorIndex, itemIndex)
-        let upperBound = max(anchorIndex, itemIndex)
-        for selectedItem in orderedItems[lowerBound...upperBound] {
-            selectedPhotosAssetIDs.insert(selectedItem.id)
-        }
-
-        lastSelectedPhotosAssetID = item.id
+        photosLibraryPicker.selectRange(to: item, in: orderedItems)
     }
 
     func addSelectedPhotosToBatch() {
-        let selectedItems = photosLibraryItems.filter { selectedPhotosAssetIDs.contains($0.id) }
+        let selectedItems = photosLibraryPicker.items.filter { photosLibraryPicker.selectedItemIDs.contains($0.id) }
         guard !selectedItems.isEmpty else {
             message = "Select one or more Photos Library images first."
             return
         }
 
-        isLoadingPhotosLibrary = true
+        photosLibraryPicker.isLoading = true
         message = "Importing \(selectedItems.count) Photos Library image\(selectedItems.count == 1 ? "" : "s")..."
 
         Task {
-            let resolvedTitles = await Self.fetchAssetTitles(for: selectedItems.map { $0.asset.localIdentifier })
+            let resolvedTitles = await photosLibraryClient.fetchAssetTitles(for: selectedItems.map(\.id))
             var loadedItems: [BatchImageItem] = []
             for selectedItem in selectedItems {
-                let resolvedTitle = resolvedTitles[selectedItem.asset.localIdentifier]
+                let resolvedTitle = resolvedTitles[selectedItem.id]
                     ?? selectedItem.title
 
-                if let batchItem = await loadBatchItem(from: selectedItem.asset, displayName: resolvedTitle) {
+                if let batchItem = await loadBatchItem(from: selectedItem, displayName: resolvedTitle) {
                     loadedItems.append(batchItem)
                 }
             }
@@ -484,10 +448,9 @@ final class ConverterViewModel {
             sharedCrop = loadedItems.first?.crop ?? CropSettings()
             sharedCropDraft = sharedCrop
             crop = sharedCropDraft
-            selectedPhotosAssetIDs.removeAll()
-            lastSelectedPhotosAssetID = nil
+            photosLibraryPicker.clearSelection()
             convertAll()
-            isLoadingPhotosLibrary = false
+            photosLibraryPicker.isLoading = false
             message = "Imported \(loadedItems.count) Photos Library image\(loadedItems.count == 1 ? "" : "s")."
         }
     }
@@ -501,15 +464,7 @@ final class ConverterViewModel {
     }
 
     private func loadItem(from url: URL) -> BatchImageItem? {
-        let didAccess = url.startAccessingSecurityScopedResource()
-        defer {
-            if didAccess {
-                url.stopAccessingSecurityScopedResource()
-            }
-        }
-
-        guard let image = NSImage(contentsOf: url),
-              let cgImage = Self.cgImage(from: image) else {
+        guard let cgImage = try? imageFileClient.loadImage(from: url) else {
             return nil
         }
 
@@ -682,14 +637,7 @@ final class ConverterViewModel {
         }
 
         do {
-            let didAccess = url.startAccessingSecurityScopedResource()
-            defer {
-                if didAccess {
-                    url.stopAccessingSecurityScopedResource()
-                }
-            }
-
-            try NegativeImageProcessor.write(Self.nsImage(from: convertedCGImage), to: url)
+            try imageFileClient.write(convertedCGImage, to: url)
             items[index].status = "Saved"
             return true
         } catch {
@@ -704,31 +652,9 @@ final class ConverterViewModel {
             return false
         }
 
-        guard let asset = fetchAsset(with: assetIdentifier),
-              let input = await requestContentEditingInput(for: asset) else {
-            items[index].status = "Photos asset unavailable"
-            return false
-        }
-
-        let output = PHContentEditingOutput(contentEditingInput: input)
-        output.adjustmentData = PHAdjustmentData(
-            formatIdentifier: "de.lumirio.Negative-Converter.invert",
-            formatVersion: "1.0",
-            data: Data("invert".utf8)
-        )
-
         do {
-            let outputURL = (try? output.renderedContentURL(for: .jpeg)) ?? output.renderedContentURL
-            try NegativeImageProcessor.write(Self.nsImage(from: convertedCGImage), to: outputURL, as: .jpeg)
-        } catch {
-            items[index].status = "Render failed"
-            return false
-        }
-
-        do {
-            try await PHPhotoLibrary.shared().performChanges {
-                let request = PHAssetChangeRequest(for: asset)
-                request.contentEditingOutput = output
+            try await photosLibraryClient.saveEditedImage(assetIdentifier: assetIdentifier) { outputURL, outputType in
+                try imageFileClient.write(convertedCGImage, to: outputURL, as: outputType)
             }
             items[index].status = "Saved to Photos"
             return true
@@ -738,130 +664,28 @@ final class ConverterViewModel {
         }
     }
 
-    private func requestPhotosAuthorization() async -> PHAuthorizationStatus {
-        await withCheckedContinuation { continuation in
-            PHPhotoLibrary.requestAuthorization(for: .readWrite) { status in
-                continuation.resume(returning: status)
-            }
-        }
-    }
-
-    private func fetchPhotosAssets(in collection: PhotosLibraryCollection?) -> [PHAsset] {
-        let options = PHFetchOptions()
-        options.sortDescriptors = [NSSortDescriptor(key: "creationDate", ascending: false)]
-        options.predicate = NSPredicate(format: "mediaType == %d", PHAssetMediaType.image.rawValue)
-
-        let result: PHFetchResult<PHAsset>
-        switch collection?.source {
-        case .assetCollection(let localIdentifier):
-            if let assetCollection = fetchAssetCollection(with: localIdentifier) {
-                result = PHAsset.fetchAssets(in: assetCollection, options: options)
-            } else {
-                result = PHAsset.fetchAssets(with: options)
-            }
-        case .allPhotos, nil:
-            result = PHAsset.fetchAssets(with: options)
-        }
-
-        var assets: [PHAsset] = []
-        result.enumerateObjects { asset, _, _ in
-            assets.append(asset)
-        }
-        return assets
-    }
-
-    private func fetchPhotosLibraryCollections() -> [PhotosLibraryCollection] {
-        var collections = [
-            PhotosLibraryCollection(
-                id: "library.all",
-                title: "All Photos",
-                systemImage: "photo.on.rectangle",
-                section: "Library",
-                source: .allPhotos
-            )
-        ]
-
-        collections.append(contentsOf: fetchSmartAlbumCollections())
-        collections.append(contentsOf: fetchUserAlbumCollections())
-        return collections
-    }
-
-    private func fetchSmartAlbumCollections() -> [PhotosLibraryCollection] {
-        let smartAlbumTypes: [(PHAssetCollectionSubtype, String, String)] = [
-            (.smartAlbumFavorites, "Favorites", "heart"),
-            (.smartAlbumRecentlyAdded, "Recently Saved", "square.and.arrow.down"),
-            (.smartAlbumScreenshots, "Screenshots", "camera.viewfinder")
-        ]
-
-        return smartAlbumTypes.compactMap { subtype, fallbackTitle, systemImage in
-            let result = PHAssetCollection.fetchAssetCollections(with: .smartAlbum, subtype: subtype, options: nil)
-            guard let collection = result.firstObject else {
-                return nil
-            }
-
-            return PhotosLibraryCollection(
-                id: collection.localIdentifier,
-                title: collection.localizedTitle ?? fallbackTitle,
-                systemImage: systemImage,
-                section: "Pinned",
-                source: .assetCollection(collection.localIdentifier)
-            )
-        }
-    }
-
-    private func fetchUserAlbumCollections() -> [PhotosLibraryCollection] {
-        let result = PHAssetCollection.fetchAssetCollections(with: .album, subtype: .any, options: nil)
-        var collections: [PhotosLibraryCollection] = []
-
-        result.enumerateObjects { collection, _, _ in
-            collections.append(PhotosLibraryCollection(
-                id: collection.localIdentifier,
-                title: collection.localizedTitle ?? "Untitled Album",
-                systemImage: "rectangle.stack",
-                section: "Albums",
-                source: .assetCollection(collection.localIdentifier)
-            ))
-        }
-
-        return collections.sorted {
-            $0.title.localizedStandardCompare($1.title) == .orderedAscending
-        }
-    }
-
-    private func fetchAsset(with localIdentifier: String) -> PHAsset? {
-        PHAsset.fetchAssets(withLocalIdentifiers: [localIdentifier], options: nil).firstObject
-    }
-
-    private func fetchAssetCollection(with localIdentifier: String) -> PHAssetCollection? {
-        PHAssetCollection.fetchAssetCollections(withLocalIdentifiers: [localIdentifier], options: nil).firstObject
-    }
-
     @discardableResult
     private func loadPhotosLibraryItems(for collectionID: String) async -> Int {
-        let collection = photosLibraryCollections.first { $0.id == collectionID }
-        let assets = fetchPhotosAssets(in: collection)
-        guard collectionID == selectedPhotosCollectionID else {
-            return photosLibraryItems.count
+        let collection = photosLibraryPicker.collections.first { $0.id == collectionID }
+        let items = photosLibraryClient.fetchItems(in: collection)
+        guard collectionID == photosLibraryPicker.selectedCollectionID else {
+            return photosLibraryPicker.items.count
         }
 
-        photosLibraryItems = assets.enumerated().map { index, asset in
-            PhotosLibraryItem(id: asset.localIdentifier, asset: asset, title: fallbackAssetTitle(asset, fallbackIndex: index))
-        }
+        photosLibraryPicker.items = items
 
-        return photosLibraryItems.count
+        return photosLibraryPicker.items.count
     }
 
-    private func loadBatchItem(from asset: PHAsset, displayName: String) async -> BatchImageItem? {
-        guard let input = await requestContentEditingInput(for: asset),
-              let url = input.fullSizeImageURL,
-              let image = NSImage(contentsOf: url),
-              let cgImage = Self.cgImage(from: image) else {
+    private func loadBatchItem(from item: PhotosLibraryItem, displayName: String) async -> BatchImageItem? {
+        guard let url = await photosLibraryClient.imageURL(for: item),
+              let cgImage = try? imageFileClient.loadImage(from: url) else {
             return nil
         }
 
         return BatchImageItem(
             url: nil,
-            assetIdentifier: asset.localIdentifier,
+            assetIdentifier: item.id,
             displayName: displayName,
             originalCGImage: cgImage,
             previewCGImage: cgImage,
@@ -869,62 +693,4 @@ final class ConverterViewModel {
         )
     }
 
-    private nonisolated static func cgImage(from image: NSImage) -> CGImage? {
-        var proposedRect = NSRect(origin: .zero, size: image.size)
-        return image.cgImage(forProposedRect: &proposedRect, context: nil, hints: nil)
-    }
-
-    private nonisolated static func nsImage(from cgImage: CGImage) -> NSImage {
-        NSImage(cgImage: cgImage, size: NSSize(width: cgImage.width, height: cgImage.height))
-    }
-
-    private func fallbackAssetTitle(_ asset: PHAsset, fallbackIndex: Int) -> String {
-        return asset.creationDate.map(Self.photoDateFormatter.string(from:)) ?? "Photo \(fallbackIndex + 1)"
-    }
-
-    private nonisolated static func fetchAssetTitles(for assetIDs: [String]) async -> [String: String] {
-        await withCheckedContinuation { continuation in
-            DispatchQueue.global(qos: .userInitiated).async {
-                let result = PHAsset.fetchAssets(withLocalIdentifiers: assetIDs, options: nil)
-                var titles: [String: String] = [:]
-
-                result.enumerateObjects { asset, _, _ in
-                    guard let resource = PHAssetResource.assetResources(for: asset).first else {
-                        return
-                    }
-
-                    let filename = URL(fileURLWithPath: resource.originalFilename)
-                        .deletingPathExtension()
-                        .lastPathComponent
-
-                    if !filename.isEmpty {
-                        titles[asset.localIdentifier] = filename
-                    }
-                }
-
-                continuation.resume(returning: titles)
-            }
-        }
-    }
-
-    private func requestContentEditingInput(for asset: PHAsset) async -> PHContentEditingInput? {
-        let options = PHContentEditingInputRequestOptions()
-        options.isNetworkAccessAllowed = true
-        options.canHandleAdjustmentData = { adjustmentData in
-            adjustmentData.formatIdentifier == "de.lumirio.Negative-Converter.invert"
-        }
-
-        return await withCheckedContinuation { continuation in
-            asset.requestContentEditingInput(with: options) { input, _ in
-                continuation.resume(returning: input)
-            }
-        }
-    }
-
-    private static let photoDateFormatter: DateFormatter = {
-        let formatter = DateFormatter()
-        formatter.dateStyle = .medium
-        formatter.timeStyle = .short
-        return formatter
-    }()
 }

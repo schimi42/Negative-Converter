@@ -8,7 +8,7 @@
 import CoreGraphics
 import Foundation
 
-struct BatchImageItem: Identifiable {
+nonisolated struct BatchImageItem: Identifiable {
     let id = UUID()
     let url: URL?
     let assetIdentifier: String?

@@ -5,7 +5,7 @@
 //  Created by Michell Schimanski on 19.04.26.
 //
 
-struct ImageAdjustmentSettings: Equatable {
+nonisolated struct ImageAdjustmentSettings: Equatable {
     var rotationDegrees: Double = 0
     var verticalCorrectionDegrees: Double = 0
     var horizontalCorrectionDegrees: Double = 0

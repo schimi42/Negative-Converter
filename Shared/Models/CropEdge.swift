@@ -5,7 +5,7 @@
 //  Created by Michell Schimanski on 19.04.26.
 //
 
-enum CropEdge {
+nonisolated enum CropEdge {
     case left
     case top
     case right

@@ -6,7 +6,6 @@
 //
 
 import SwiftUI
-import Photos
 import UniformTypeIdentifiers
 
 struct ContentView: View {
@@ -22,8 +21,8 @@ struct ContentView: View {
             VStack(spacing: 0) {
                 HStack(spacing: 0) {
                     VSplitView {
-                        imagePane(title: "Negative", image: viewModel.originalImage, showsCrop: true, isCropEditable: true)
-                        imagePane(title: "Positive", image: viewModel.convertedImage, showsCrop: true)
+                        imagePane(title: "Negative", image: viewModel.originalDisplayImage, showsCrop: true, isCropEditable: true)
+                        imagePane(title: "Positive", image: viewModel.convertedDisplayImage, showsCrop: true)
                     }
                     .frame(maxWidth: .infinity, minHeight: 420)
 
@@ -250,7 +249,7 @@ struct ContentView: View {
         .background(Color(nsColor: .windowBackgroundColor))
     }
 
-    private func imagePane(title: String, image: NSImage?, showsCrop: Bool = false, isCropEditable: Bool = false) -> some View {
+    private func imagePane(title: String, image: CGImage?, showsCrop: Bool = false, isCropEditable: Bool = false) -> some View {
         VStack(alignment: .leading, spacing: 12) {
             Text(title)
                 .font(.headline)
@@ -311,7 +310,7 @@ struct ContentView: View {
             Button(selectedSaveLabel) {
                 viewModel.saveSelected()
             }
-            .disabled(viewModel.convertedImage == nil)
+            .disabled(viewModel.convertedDisplayImage == nil)
 
             Button(saveAllLabel) {
                 viewModel.saveAll()
@@ -321,7 +320,7 @@ struct ContentView: View {
             Button(exportSelectedLabel) {
                 viewModel.exportSelectedToFolder()
             }
-            .disabled(viewModel.convertedImage == nil)
+            .disabled(viewModel.convertedDisplayImage == nil)
 
             Button(exportAllLabel) {
                 viewModel.exportAllToFolder()
@@ -512,10 +511,7 @@ private struct BatchThumbnailCell: View {
                         .fill(Color(nsColor: .textBackgroundColor))
 
                     FittedImageView(
-                        image: NSImage(
-                            cgImage: item.originalCGImage,
-                            size: NSSize(width: item.originalCGImage.width, height: item.originalCGImage.height)
-                        ),
+                        image: item.originalCGImage,
                         crop: crop,
                         showsCrop: true
                     )
@@ -541,7 +537,7 @@ private struct BatchThumbnailCell: View {
 }
 
 private struct FittedImageView: View {
-    let image: NSImage
+    let image: CGImage
     let crop: CropSettings
     let showsCrop: Bool
     var isCropEditable = false
@@ -549,10 +545,10 @@ private struct FittedImageView: View {
 
     var body: some View {
         GeometryReader { geometry in
-            let imageFrame = fittedFrame(for: image.size, in: geometry.size)
+            let imageFrame = fittedFrame(for: image.displaySize, in: geometry.size)
 
             ZStack {
-                Image(nsImage: image)
+                Image(decorative: image, scale: 1)
                     .resizable()
                     .scaledToFit()
                     .frame(width: geometry.size.width, height: geometry.size.height)
@@ -583,6 +579,12 @@ private struct FittedImageView: View {
             width: fittedSize.width,
             height: fittedSize.height
         )
+    }
+}
+
+private extension CGImage {
+    var displaySize: CGSize {
+        CGSize(width: width, height: height)
     }
 }
 
@@ -748,6 +750,7 @@ private struct CropHandle: View {
 private struct PhotosLibrarySheet: View {
     @Bindable var viewModel: ConverterViewModel
     @Binding var isPresented: Bool
+    private let thumbnailClient: PhotosThumbnailClient = PhotoKitThumbnailClient()
     @State private var searchText = ""
 
     private let columns = [
@@ -756,10 +759,10 @@ private struct PhotosLibrarySheet: View {
 
     private var filteredItems: [PhotosLibraryItem] {
         guard !searchText.isEmpty else {
-            return viewModel.photosLibraryItems
+            return viewModel.photosLibraryPicker.items
         }
 
-        return viewModel.photosLibraryItems.filter {
+        return viewModel.photosLibraryPicker.items.filter {
             $0.title.localizedStandardContains(searchText)
         }
     }
@@ -767,8 +770,8 @@ private struct PhotosLibrarySheet: View {
     var body: some View {
         HSplitView {
             PhotosLibrarySidebar(
-                collections: viewModel.photosLibraryCollections,
-                selectedCollectionID: viewModel.selectedPhotosCollectionID
+                collections: viewModel.photosLibraryPicker.collections,
+                selectedCollectionID: viewModel.photosLibraryPicker.selectedCollectionID
             ) { collection in
                 viewModel.selectPhotosLibraryCollection(collection)
             }
@@ -800,7 +803,7 @@ private struct PhotosLibrarySheet: View {
                         Label("Reload", systemImage: "arrow.clockwise")
                     }
                     .labelStyle(.iconOnly)
-                    .disabled(viewModel.isLoadingPhotosLibrary)
+                    .disabled(viewModel.photosLibraryPicker.isLoading)
                     .help("Reload Photos Library")
                 }
                 .padding(.horizontal, 18)
@@ -808,10 +811,10 @@ private struct PhotosLibrarySheet: View {
 
                 Divider()
 
-                if viewModel.isLoadingPhotosLibrary && viewModel.photosLibraryItems.isEmpty {
+                if viewModel.photosLibraryPicker.isLoading && viewModel.photosLibraryPicker.items.isEmpty {
                     ProgressView("Loading Photos Library...")
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
-                } else if viewModel.photosLibraryItems.isEmpty {
+                } else if viewModel.photosLibraryPicker.items.isEmpty {
                     ContentUnavailableView("No Photos Loaded", systemImage: "photo.on.rectangle", description: Text("Grant access to Photos and reload the library."))
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
                 } else if filteredItems.isEmpty {
@@ -823,7 +826,8 @@ private struct PhotosLibrarySheet: View {
                             ForEach(filteredItems) { item in
                                 PhotosLibraryGridItem(
                                     item: item,
-                                    isSelected: viewModel.selectedPhotosAssetIDs.contains(item.id)
+                                    isSelected: viewModel.photosLibraryPicker.selectedItemIDs.contains(item.id),
+                                    thumbnailClient: thumbnailClient
                                 ) { isShiftSelecting in
                                     if isShiftSelecting {
                                         viewModel.selectPhotosLibraryRange(to: item, in: filteredItems)
@@ -845,7 +849,7 @@ private struct PhotosLibrarySheet: View {
                     VStack(spacing: 2) {
                         Text("Choose Photos")
                             .font(.caption.bold())
-                        Text("\(viewModel.selectedPhotosAssetIDs.count) selected")
+                        Text("\(viewModel.photosLibraryPicker.selectedItemIDs.count) selected")
                             .font(.caption2)
                             .foregroundStyle(.secondary)
                     }
@@ -861,14 +865,14 @@ private struct PhotosLibrarySheet: View {
                         isPresented = false
                     }
                     .keyboardShortcut(.defaultAction)
-                    .disabled(!viewModel.hasPhotosLibrarySelection || viewModel.isLoadingPhotosLibrary)
+                    .disabled(!viewModel.hasPhotosLibrarySelection || viewModel.photosLibraryPicker.isLoading)
                 }
                 .padding(.horizontal, 18)
                 .padding(.vertical, 10)
             }
         }
         .onDisappear {
-            viewModel.isLoadingPhotosLibrary = false
+            viewModel.photosLibraryPicker.isLoading = false
         }
     }
 }
@@ -913,6 +917,7 @@ private struct PhotosLibrarySidebar: View {
 private struct PhotosLibraryGridItem: View {
     let item: PhotosLibraryItem
     let isSelected: Bool
+    let thumbnailClient: PhotosThumbnailClient
     let action: (Bool) -> Void
 
     var body: some View {
@@ -924,7 +929,7 @@ private struct PhotosLibraryGridItem: View {
                 Rectangle()
                     .fill(Color(nsColor: .textBackgroundColor))
 
-                PhotosLibraryThumbnailView(asset: item.asset)
+                PhotosLibraryThumbnailView(item: item, thumbnailClient: thumbnailClient)
 
                 if isSelected {
                     RoundedRectangle(cornerRadius: 4)
@@ -951,13 +956,14 @@ private struct PhotosLibraryGridItem: View {
 }
 
 private struct PhotosLibraryThumbnailView: View {
-    let asset: PHAsset
-    @State private var thumbnail: NSImage?
+    let item: PhotosLibraryItem
+    let thumbnailClient: PhotosThumbnailClient
+    @State private var thumbnail: CGImage?
 
     var body: some View {
         Group {
             if let thumbnail {
-                Image(nsImage: thumbnail)
+                Image(decorative: thumbnail, scale: 1)
                     .resizable()
                     .scaledToFill()
             } else {
@@ -968,27 +974,11 @@ private struct PhotosLibraryThumbnailView: View {
         }
         .frame(width: 88, height: 66)
         .clipped()
-        .task(id: asset.localIdentifier) {
-            thumbnail = await loadThumbnail(for: asset)
-        }
-    }
-
-    private func loadThumbnail(for asset: PHAsset) async -> NSImage? {
-        let manager = PHCachingImageManager()
-        let options = PHImageRequestOptions()
-        options.deliveryMode = .fastFormat
-        options.resizeMode = .fast
-        options.isNetworkAccessAllowed = true
-
-        return await withCheckedContinuation { continuation in
-            manager.requestImage(
-                for: asset,
-                targetSize: CGSize(width: 176, height: 132),
-                contentMode: .aspectFill,
-                options: options
-            ) { image, _ in
-                continuation.resume(returning: image)
-            }
+        .task(id: item.id) {
+            thumbnail = await thumbnailClient.thumbnail(
+                for: item,
+                targetSize: CGSize(width: 176, height: 132)
+            )
         }
     }
 }

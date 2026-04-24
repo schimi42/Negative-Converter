@@ -7,7 +7,7 @@
 
 import Foundation
 
-struct CropAspectRatio: Identifiable, Equatable {
+nonisolated struct CropAspectRatio: Identifiable, Equatable {
     let id: String
     let title: String
     let ratio: Double?

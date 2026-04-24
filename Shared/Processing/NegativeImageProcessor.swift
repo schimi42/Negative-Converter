@@ -5,12 +5,12 @@
 //  Created by Michell Schimanski on 19.04.26.
 //
 
-import AppKit
+import CoreGraphics
 import CoreImage
 import ImageIO
 import UniformTypeIdentifiers
 
-enum NegativeImageProcessorError: LocalizedError {
+nonisolated enum NegativeImageProcessorError: LocalizedError {
     case couldNotReadImage
     case couldNotRenderImage
 
@@ -24,7 +24,7 @@ enum NegativeImageProcessorError: LocalizedError {
     }
 }
 
-enum NegativeImageProcessor {
+nonisolated enum NegativeImageProcessor {
     private static let context = CIContext(options: [.workingColorSpace: CGColorSpace(name: CGColorSpace.sRGB) as Any])
 
     static func previewCGImage(
@@ -52,25 +52,6 @@ enum NegativeImageProcessor {
         )
     }
 
-    static func previewImage(
-        from image: NSImage,
-        adjustments: ImageAdjustmentSettings = ImageAdjustmentSettings()
-    ) throws -> NSImage {
-        let sourceImage = try cgImage(from: image)
-        let cgImage = try previewCGImage(from: sourceImage, adjustments: adjustments)
-        return NSImage(cgImage: cgImage, size: NSSize(width: cgImage.width, height: cgImage.height))
-    }
-
-    static func invertedImage(
-        from image: NSImage,
-        crop: CropSettings = CropSettings(),
-        adjustments: ImageAdjustmentSettings = ImageAdjustmentSettings()
-    ) throws -> NSImage {
-        let sourceImage = try cgImage(from: image)
-        let cgImage = try invertedCGImage(from: sourceImage, crop: crop, adjustments: adjustments)
-        return NSImage(cgImage: cgImage, size: NSSize(width: cgImage.width, height: cgImage.height))
-    }
-
     static func invertedImageData(from url: URL, outputType: UTType = .jpeg) throws -> Data {
         guard let sourceImage = CIImage(contentsOf: url) else {
             throw NegativeImageProcessorError.couldNotReadImage
@@ -94,20 +75,19 @@ enum NegativeImageProcessor {
         return data
     }
 
-    static func write(_ image: NSImage, to url: URL) throws {
+    static func write(_ image: CGImage, to url: URL) throws {
         let outputType = UTType(filenameExtension: url.pathExtension) ?? .png
         try write(image, to: url, as: outputType)
     }
 
-    static func write(_ image: NSImage, to url: URL, as outputType: UTType) throws {
-        let cgImage = try cgImage(from: image)
+    static func write(_ image: CGImage, to url: URL, as outputType: UTType) throws {
         let destinationType = outputType.identifier as CFString
 
         guard let destination = CGImageDestinationCreateWithURL(url as CFURL, destinationType, 1, nil) else {
             throw NegativeImageProcessorError.couldNotRenderImage
         }
 
-        CGImageDestinationAddImage(destination, cgImage, nil)
+        CGImageDestinationAddImage(destination, image, nil)
 
         guard CGImageDestinationFinalize(destination) else {
             throw NegativeImageProcessorError.couldNotRenderImage
@@ -185,15 +165,6 @@ enum NegativeImageProcessor {
         let cropRect = CGRect(x: x, y: y, width: cropWidth, height: cropHeight).integral
 
         return image.cropped(to: cropRect)
-    }
-
-    private static func cgImage(from image: NSImage) throws -> CGImage {
-        var proposedRect = NSRect(origin: .zero, size: image.size)
-        guard let cgImage = image.cgImage(forProposedRect: &proposedRect, context: nil, hints: nil) else {
-            throw NegativeImageProcessorError.couldNotReadImage
-        }
-
-        return cgImage
     }
 
     private static func grayscaleImageIfNeeded(_ image: CIImage, adjustments: ImageAdjustmentSettings) -> CIImage {
