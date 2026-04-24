@@ -10,6 +10,8 @@ This document explains how the project is structured and how the main pieces fit
   - The main app target.
 - `Negative Converter Photos Extension/`
   - The Apple Photos editing extension target.
+- `Shared/`
+  - Source files intended to be reused across app targets.
 - `docs/`
   - Project documentation for release preparation and future maintenance.
 
@@ -47,9 +49,13 @@ The main app is intentionally small and centered around a straightforward SwiftU
     - save and export actions
   - Acts as the boundary between UI events and image-processing or PhotoKit operations.
 
+## Shared code
+
+The shared area contains code that should remain independent from a specific app surface where possible.
+
 ### Image processing
 
-- `NegativeImageProcessor.swift`
+- `Shared/Processing/NegativeImageProcessor.swift`
   - Contains the image-processing pipeline.
   - Responsible for:
     - building preview images
@@ -57,6 +63,7 @@ The main app is intentionally small and centered around a straightforward SwiftU
     - applying crop and geometric adjustments
     - writing output files to disk
   - This file is the best place for future work on image quality, inversion tuning, and output formats.
+  - It is currently shared by the main macOS app and the Photos editing extension.
 
 ### Assets and entitlements
 
@@ -110,7 +117,7 @@ The project is not heavily abstracted. Most behavior lives in three places:
 
 - SwiftUI views in `ContentView.swift`
 - state and workflow in `ConverterViewModel.swift`
-- processing in `NegativeImageProcessor.swift`
+- processing in `Shared/Processing/NegativeImageProcessor.swift`
 
 That keeps the code easy to navigate for a small app, but as the project grows it may make sense to split some responsibilities into separate files, for example:
 
