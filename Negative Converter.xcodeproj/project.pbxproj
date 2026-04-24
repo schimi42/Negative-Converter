@@ -46,6 +46,7 @@
 		1217A6452F954DB1000D930F /* Negative Converter Photos Extension/PhotoEditingViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Negative Converter Photos Extension/PhotoEditingViewController.swift"; sourceTree = "<group>"; };
 		12B1C8032F9B000100000001 /* Shared/Models/CropSettings.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Shared/Models/CropSettings.swift; sourceTree = "<group>"; };
 		12B1C8042F9B000100000001 /* Shared/Models/ImageAdjustmentSettings.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Shared/Models/ImageAdjustmentSettings.swift; sourceTree = "<group>"; };
+		12F4A0002FAA000100000001 /* Lumirio Negative Converter iOS.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "Lumirio Negative Converter iOS.app"; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
@@ -72,6 +73,11 @@
 			path = Shared;
 			sourceTree = "<group>";
 		};
+		12F4A0012FAA000100000001 /* Negative Converter iOS */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = "Negative Converter iOS";
+			sourceTree = "<group>";
+		};
 /* End PBXFileSystemSynchronizedRootGroup section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -89,6 +95,13 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		12F4A0032FAA000100000001 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
@@ -96,6 +109,7 @@
 			isa = PBXGroup;
 			children = (
 				1217A62D2F954DB0000D930F /* Negative Converter */,
+				12F4A0012FAA000100000001 /* Negative Converter iOS */,
 				12B1C8002F9B000100000001 /* Shared */,
 				1217A6442F954DB1000D930F /* Negative Converter Photos Extension */,
 				1217A62C2F954DB0000D930F /* Products */,
@@ -107,6 +121,7 @@
 			isa = PBXGroup;
 			children = (
 				1217A62B2F954DB0000D930F /* Lumirio Negative Converter.app */,
+				12F4A0002FAA000100000001 /* Lumirio Negative Converter iOS.app */,
 				1217A6412F954DB1000D930F /* Negative Converter Photos Extension.appex */,
 			);
 			name = Products;
@@ -170,6 +185,29 @@
 			productReference = 1217A6412F954DB1000D930F /* Negative Converter Photos Extension.appex */;
 			productType = "com.apple.product-type.app-extension";
 		};
+		12F4A0052FAA000100000001 /* Lumirio Negative Converter iOS */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 12F4A0082FAA000100000001 /* Build configuration list for PBXNativeTarget "Lumirio Negative Converter iOS" */;
+			buildPhases = (
+				12F4A0022FAA000100000001 /* Sources */,
+				12F4A0032FAA000100000001 /* Frameworks */,
+				12F4A0042FAA000100000001 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			fileSystemSynchronizedGroups = (
+				12B1C8002F9B000100000001 /* Shared */,
+				12F4A0012FAA000100000001 /* Negative Converter iOS */,
+			);
+			name = "Lumirio Negative Converter iOS";
+			packageProductDependencies = (
+			);
+			productName = "Lumirio Negative Converter iOS";
+			productReference = 12F4A0002FAA000100000001 /* Lumirio Negative Converter iOS.app */;
+			productType = "com.apple.product-type.application";
+		};
 /* End PBXNativeTarget section */
 
 /* Begin PBXProject section */
@@ -184,6 +222,9 @@
 						CreatedOnToolsVersion = 26.4;
 					};
 					1217A63F2F954DB1000D930F = {
+						CreatedOnToolsVersion = 26.4;
+					};
+					12F4A0052FAA000100000001 = {
 						CreatedOnToolsVersion = 26.4;
 					};
 				};
@@ -204,6 +245,7 @@
 			targets = (
 				1217A62A2F954DB0000D930F /* Negative Converter */,
 				1217A63F2F954DB1000D930F /* Negative Converter Photos Extension */,
+				12F4A0052FAA000100000001 /* Lumirio Negative Converter iOS */,
 			);
 		};
 /* End PBXProject section */
@@ -217,6 +259,13 @@
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 		1217A64E2F954DB1000D930F /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		12F4A0042FAA000100000001 /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -241,6 +290,13 @@
 				12B1C8012F9B000100000001 /* Shared/Models/CropSettings.swift in Sources */,
 				12B1C8022F9B000100000001 /* Shared/Models/ImageAdjustmentSettings.swift in Sources */,
 				1217A6472F954DB1000D930F /* Shared/Processing/NegativeImageProcessor.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		12F4A0022FAA000100000001 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -509,6 +565,61 @@
 			};
 			name = Release;
 		};
+		12F4A0062FAA000100000001 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = F88CM8CA3Z;
+				ENABLE_PREVIEWS = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_CFBundleDisplayName = "Lumirio Negative Converter";
+				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.photography";
+				INFOPLIST_KEY_NSCameraUsageDescription = "Lumirio Negative Converter can import photos from your camera.";
+				INFOPLIST_KEY_NSPhotoLibraryAddUsageDescription = "Lumirio Negative Converter can save converted images to your photo library.";
+				INFOPLIST_KEY_NSPhotoLibraryUsageDescription = "Lumirio Negative Converter needs access to selected photos for conversion.";
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				MARKETING_VERSION = 1.0.1;
+				PRODUCT_BUNDLE_IDENTIFIER = "de.lumirio.Negative-Converter.iOS";
+				PRODUCT_NAME = "Lumirio Negative Converter iOS";
+				SDKROOT = iphoneos;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Debug;
+		};
+		12F4A0072FAA000100000001 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = F88CM8CA3Z;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_CFBundleDisplayName = "Lumirio Negative Converter";
+				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.photography";
+				INFOPLIST_KEY_NSCameraUsageDescription = "Lumirio Negative Converter can import photos from your camera.";
+				INFOPLIST_KEY_NSPhotoLibraryAddUsageDescription = "Lumirio Negative Converter can save converted images to your photo library.";
+				INFOPLIST_KEY_NSPhotoLibraryUsageDescription = "Lumirio Negative Converter needs access to selected photos for conversion.";
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				MARKETING_VERSION = 1.0.1;
+				PRODUCT_BUNDLE_IDENTIFIER = "de.lumirio.Negative-Converter.iOS";
+				PRODUCT_NAME = "Lumirio Negative Converter iOS";
+				SDKROOT = iphoneos;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Release;
+		};
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
@@ -535,6 +646,15 @@
 			buildConfigurations = (
 				1217A64F2F954DB1000D930F /* Debug */,
 				1217A6502F954DB1000D930F /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		12F4A0082FAA000100000001 /* Build configuration list for PBXNativeTarget "Lumirio Negative Converter iOS" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				12F4A0062FAA000100000001 /* Debug */,
+				12F4A0072FAA000100000001 /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
